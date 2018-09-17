@@ -17,5 +17,9 @@ executable dca
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
+  other-modules:       Base,
+                       Gridfuncs,
+                       Gridneighs
   build-depends:       base >= 4.7 && < 5,
-                       accelerate
+                       accelerate,
+                       containers
