@@ -68,7 +68,7 @@ periphery' d (r,c) =
     ps3 = zip [r, r+1 .. r+d-1] [c+d, c+d-1 .. c+1]
     ps4 = zip (repeat (r+d)) [c, c-1 .. c-d+1]
     ps5 = zip [r+d, r+d-1 .. r+1] (repeat (c-d))
-    ps6 = zip [r, r-1, r-d+1] [c-d, c-d+1 .. c-1]
+    ps6 = zip [r, r-1 .. r-d] [c-d, c-d+1 .. c-1]
   in filter isValid (ps6 ++ ps5 ++ ps4 ++ ps3 ++ ps2 ++ ps1)
   
 isValid :: Cell -> Bool
