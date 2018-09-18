@@ -17,7 +17,7 @@ type Chs = Acc (Array DIM1 Int)
 data EType = NEW | END | HOFF deriving (Show, Eq, Ord)
 
 data Event = Event {
-  id :: Int,
+  eid :: Int,
   time :: Float,
   etype :: EType,
   cell :: Cell,

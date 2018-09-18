@@ -43,7 +43,7 @@ eligibleChs cell grid = elig
     puielig = P.fst uielig :: Acc (Array DIM1 (DIM1, Bool))
     elig = map (unindex1 . fst) puielig :: Acc (Array DIM1 Int)
 
--- Throws an error
+-- Throws an error if the reuse constraint is violated
 -- validateReuseConstraint :: Grid -> Bool
 -- validateReuseConstraint grid = P.any P.not $ P.map checkIdx gridIdxs
 --   where
@@ -62,8 +62,17 @@ eligibleChs cell grid = elig
 featureRep :: Grid -> Frep
 featureRep grid = P.foldl fn zeros gridIdxs
   where
-    zeros = fill (constant (Z :. rows :. cols :. channels)) 0
-      fn frep idx = permute const frep
+    zeros = fill (constant (Z :. rows :. cols :. channels + 1)) 0
+    fn :: Frep -> Cell -> Frep
+    fn frep (r,c) = permute const frep indcomb gridCell
+      where
+        -- TODO This is where to create the vector of length CHANNELS
+        gridCell = undefined
+        -- Traverse the 3rd dimension of the given cell
+        indcomb :: Exp DIM1 -> Exp DIM3
+        indcomb nsh = index3 (lift r) (lift c) (unindex1 nsh)
+
+
 
 incrementalFreps :: Grid -> Frep -> Cell -> EType -> Chs -> Freps
 incrementalFreps = undefined

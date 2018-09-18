@@ -13,13 +13,32 @@ build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  README.md
 
-executable dca
+executable dca-exe
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
-  other-modules:       Base,
-                       Gridfuncs,
-                       Gridneighs
-  build-depends:       base >= 4.7 && < 5,
-                       accelerate,
-                       containers
+  other-modules:       
+      Base
+    , Gridfuncs
+    , Gridneighs
+  build-depends:       
+      base >= 4.7 && < 5
+    , accelerate
+    , containers
+
+test-suite dca-test
+  type: exitcode-stdio-1.0
+  main-is: TestGridneighs.hs 
+  other-modules:
+      Gridneighs
+    , Base
+  hs-source-dirs:
+      test
+      src
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -main-is TestGridneighs
+  build-depends:
+      base >=4.7 && <5
+    , accelerate
+    , containers
+    , criterion
+  default-language: Haskell2010

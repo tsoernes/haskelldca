@@ -4,6 +4,7 @@ import qualified Data.Array.Accelerate as A
 import Data.Array.Accelerate (Acc, Array, DIM1, DIM2, DIM3, Z(..), (:.)(..), (!), fromList, use)
 import Data.Array.Accelerate.Interpreter (run)
 import Base
+import qualified Data.Set
 
 -- (neighs, nNeighs) = generateNeighs
 
@@ -49,15 +50,28 @@ neighborhood (r,c) = (neighs, nNeighs)
 periphery d (r,c) =
   -- The set of d-distance neighbors form a hexagon shape. Traverse each of
   -- the sides of this hexagon and gather up the cell indices.
-  let 
-    ((r1,c1):ps1) = reverse . take (d+1) . iterate (\(r,c)->(r,c+1))   $ (r-d,c)
-    ((r2,c2):ps2) = reverse . take (d+1) . iterate (\(r,c)->(r+1,c))   $ (r1,c1)
-    ((r3,c3):ps3) = reverse . take (d+1) . iterate (\(r,c)->(r+1,c-1)) $ (r2,c2)
-    ((r4,c4):ps4) = reverse . take (d+1) . iterate (\(r,c)->(r,c-1))   $ (r3,c3)
-    ((r5,c5):ps5) = reverse . take (d+1) . iterate (\(r,c)->(r-1,c))   $ (r4,c4)
-    ps6           = reverse . take d     . iterate (\(r,c)->(r-1,c+1)) $ (r5,c5)
+  let
+    ps1 = take d . iterate (\(r,c)->(r,c+1))   $ (r-d,c)
+    ps2 = take d . iterate (\(r,c)->(r+1,c))   $ (r-d,c+d)
+    ps3 = take d . iterate (\(r,c)->(r+1,c-1)) $ (r,c+d)
+    ps4 = take d . iterate (\(r,c)->(r,c-1))   $ (r+d,c)
+    ps5 = take d . iterate (\(r,c)->(r-1,c))   $ (r+d,c-d)
+    ps6 = take d . iterate (\(r,c)->(r-1,c+1)) $ (r,c-d)
   in filter isValid (ps6 ++ ps5 ++ ps4 ++ ps3 ++ ps2 ++ ps1)
 
+-- Return the set of d-distance neighbors for the given cell
+periphery' d (r,c) =
+  -- The set of d-distance neighbors form a hexagon shape. Traverse each of
+  -- the sides of this hexagon and gather up the cell indices.
+  let
+    ps1 = zip (repeat (r-d)) [c, c+1 .. c+d-1]
+    ps2 = zip [r-d, r-d+1 .. r] (repeat (c+d))
+    ps3 = zip [r, r+1 .. r+d-1] [c+d, c+d-1 .. c+1]
+    ps4 = zip (repeat (r+d)) [c, c-1 .. c-d+1]
+    ps5 = zip [r+d, r+d-1 .. r+1] (repeat (c-d))
+    ps6 = zip [r, r-1, r-d+1] [c-d, c-d+1 .. c-1]
+  in filter isValid (ps6 ++ ps5 ++ ps4 ++ ps3 ++ ps2 ++ ps1)
+  
 isValid :: Cell -> Bool
 isValid (r, c)
   | r < 0 || r >= rows = False
