@@ -4,7 +4,6 @@ import qualified Data.Array.Accelerate as A
 import Data.Array.Accelerate (Acc, Array, DIM1, DIM2, DIM3, Z(..), (:.)(..), (!), fromList, use)
 import Data.Array.Accelerate.Interpreter (run)
 import Base
-import qualified Data.Set
 
 -- (neighs, nNeighs) = generateNeighs
 

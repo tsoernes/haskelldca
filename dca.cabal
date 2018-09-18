@@ -26,19 +26,36 @@ executable dca-exe
     , accelerate
     , containers
 
-test-suite dca-test
+benchmark dca-bench
   type: exitcode-stdio-1.0
-  main-is: TestGridneighs.hs 
+  main-is: BenchGridneighs.hs 
   other-modules:
       Gridneighs
     , Base
   hs-source-dirs:
+      bench
+      src
+  ghc-options: -O -threaded -rtsopts -with-rtsopts=-N -main-is BenchGridneighs
+  build-depends:
+      base >=4.7 && <5
+    , accelerate
+    , criterion
+  default-language: Haskell2010
+
+test-suite dca-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs 
+  other-modules:
+      Gridneighs
+      GridneighsSpec
+    , Base
+  hs-source-dirs:
       test
       src
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N -main-is TestGridneighs
+  ghc-options: -O -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
     , accelerate
     , containers
-    , criterion
+    , hspec
   default-language: Haskell2010
