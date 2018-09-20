@@ -1,3 +1,5 @@
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Gridfuncs where
 
 import Data.Array.Accelerate
@@ -24,6 +26,7 @@ eligibleMap cell grid = map not notEmap
     bitor :: GridCell -> Cell -> GridCell
     bitor gc cell' = zipWith (||) gc (sliceCell cell' grid)
 
+-- Get the allocation map of a particular cell
 sliceCell :: Cell -> Grid -> GridCell
 sliceCell (r, c) grid = slice grid (constant (Z :. r :. c :. All))
 
@@ -58,21 +61,48 @@ eligibleChs cell grid = elig
 --         yy = unlift xx
 --         tviols = the viols :: Exp Bool
 
--- Feature representation
+-- Given a grid 'grid' and a set of actions, the latter specified by a cell, an event type
+-- and a list of channels, return the grids ('afterstates') that would result from
+-- executing each of the actions on 'grid'
+afterstates :: Grid -> Cell -> EType -> Chs -> Grids
+afterstates grid (r, c) etype chs = permute const grids idxmap vals
+  where
+    vals = fill (index1 $ length chs) (lift (etype P./= END)) :: Acc (Array DIM1 Bool)
+    grids = replicate (lift (Z :. length chs :. All :. All :. All)) grid
+    idxmap :: Exp DIM1 -> Exp DIM4
+    idxmap nsh = index4 (unindex1 nsh) (lift r) (lift c) (lift $ chs ! nsh)
+
+-- A feature representation (frep for short) of the grid. The frep is of the
+-- same spatial dimension as the grid. For a given cell, the first 'CHANNELS' features
+-- specifies how many times each of the channels is in used within a 4-cell radius,
+-- not including the cell itself. An additional feature counts the number of eligible
+-- channels in that cell.
 featureRep :: Grid -> Frep
 featureRep grid = P.foldl fn zeros gridIdxs
   where
     zeros = fill (constant (Z :. rows :. cols :. channels + 1)) 0
+    -- Fill in 1 cell at a time
     fn :: Frep -> Cell -> Frep
-    fn frep (r,c) = permute const frep indcomb gridCell
+    fn frep (r,c) = permute const frep idxmap (nUsed ++ nElig)
       where
-        -- TODO This is where to create the vector of length CHANNELS
-        gridCell = undefined
+        nUsedZ = fill (constant (Z :. channels + 1)) 0 :: Acc (Vector Int)
+        neighs4 = getNeighs 4 (r, c) False
+        nUsed = P.foldl (\acc cell -> zipWith (+) acc (map boolToInt $ sliceCell cell grid)) nUsedZ neighs4
+        nElig = reshape (constant (Z :. 1)) . sum . map boolToInt $ eligibleMap (r,c) grid
         -- Traverse the 3rd dimension of the given cell
-        indcomb :: Exp DIM1 -> Exp DIM3
-        indcomb nsh = index3 (lift r) (lift c) (unindex1 nsh)
-
+        idxmap :: Exp DIM1 -> Exp DIM3
+        idxmap nsh = index3 (lift r) (lift c) (unindex1 nsh)
 
 
 incrementalFreps :: Grid -> Frep -> Cell -> EType -> Chs -> Freps
 incrementalFreps = undefined
+
+-- | Create a rank-4 index from four Exp Int`s
+index4
+    :: (Elt i, Slice (Z :. i), Slice (Z :. i :. i), Slice (Z :. i :. i :. i))
+    => Exp i
+    -> Exp i
+    -> Exp i
+    -> Exp i
+    -> Exp (Z :. i :. i :. i :. i)
+index4 k j i l = lift (Z :. k :. j :. i :. l)
