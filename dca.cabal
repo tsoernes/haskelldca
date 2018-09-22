@@ -25,6 +25,11 @@ executable dca-exe
       base >= 4.7 && < 5
     , accelerate
     , containers
+    , optparse-applicative
+    , mtl
+    , heap
+    , random
+    , random-fu
 
 benchmark dca-bench
   type: exitcode-stdio-1.0
