@@ -21,6 +21,9 @@ executable dca-exe
       Base
     , Gridfuncs
     , Gridneighs
+    , Opt
+    , Stats
+    , EventGen
   build-depends:       
       base >= 4.7 && < 5
     , accelerate
@@ -30,6 +33,7 @@ executable dca-exe
     , heap
     , random
     , random-fu
+    , time
 
 benchmark dca-bench
   type: exitcode-stdio-1.0

@@ -3,4 +3,4 @@ packages:
 - .
 extra-deps:
 - accelerate-1.2.0.0
-resolver: lts-12.9
+resolver: lts-12.10
