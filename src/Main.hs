@@ -1,10 +1,12 @@
 module Main where
 
-import Gridneighs
-import Gridfuncs
 import Control.Monad.Reader
-import Base
 import Opt
+import GridNeighs
+import Gridfuncs
+import Base
+import Scratch
+import Simulator
 import Options.Applicative
 
 main :: IO ()

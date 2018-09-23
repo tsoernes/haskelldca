@@ -89,11 +89,16 @@ featureRep grid = P.foldl fn zeros gridIdxs
         nUsedZ = fill (constant (Z :. channels + 1)) 0 :: Acc (Vector Int)
         neighs4 = getNeighs 4 (r, c) False
         nUsed = P.foldl (\acc cell -> zipWith (+) acc (map boolToInt $ sliceCell cell grid)) nUsedZ neighs4
-        nElig = reshape (constant (Z :. 1)) . sum . map boolToInt $ eligibleMap (r,c) grid
+        nElig = reshape (constant (Z :. 1)) . boolSum $ eligibleMap (r,c) grid
         -- Traverse the 3rd dimension of the given cell
         idxmap :: Exp DIM1 -> Exp DIM3
         idxmap nsh = index3 (lift r) (lift c) (unindex1 nsh)
 
+boolSum :: Shape sh => Acc (Array (sh :. Int) Bool) -> Acc (Scalar Int)
+boolSum = sum . flatten . map boolToInt
+
+boolSum2 :: Shape sh => Acc (Array (sh :. Int) Bool) -> Exp Int
+boolSum2 = the . sum . flatten . map boolToInt
 
 incrementalFreps :: Grid -> Frep -> Cell -> EType -> Chs -> Freps
 incrementalFreps = undefined

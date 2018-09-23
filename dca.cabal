@@ -24,6 +24,8 @@ executable dca-exe
     , Opt
     , Stats
     , EventGen
+    , Simulator
+    , Scratch
   build-depends:       
       base >= 4.7 && < 5
     , accelerate
@@ -34,6 +36,10 @@ executable dca-exe
     , random
     , random-fu
     , time
+    , microlens
+    , microlens-mtl
+    , microlens-th
+    , microlens-ghc
 
 benchmark dca-bench
   type: exitcode-stdio-1.0

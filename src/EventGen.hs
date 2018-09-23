@@ -1,9 +1,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module EventGen
-  ( generateNewEvent
+  ( EventGen
+  , generateNewEvent
   , generateHoffNewEvent
   , generateEndEvent
   , generateHoffEndEvent
@@ -11,11 +14,12 @@ module EventGen
   ) where
 
 import Base
+import Control.Monad (forM_)
 import Control.Monad.Reader (Reader, asks)
-import Control.Monad.State (MonadState, State, StateT, state)
+import Control.Monad.State (MonadState, State, StateT, get, modify', state)
 import Control.Monad.State.Lazy (State)
 import Data.Functor.Identity (Identity)
-import Data.Heap as Heap
+import qualified Data.Heap as Heap
 import qualified Data.Map.Strict as Map
 import Data.Maybe
 import Data.Random (MonadRandom, sampleState)
@@ -23,93 +27,104 @@ import Data.Random.Distribution.Exponential (exponential)
 import Data.Random.Distribution.Uniform (integralUniform)
 import Data.Random.Lift (Lift)
 import Gridneighs (getNeighs)
+import Lens.Micro
+import Lens.Micro.GHC (at)
+import Lens.Micro.Mtl
+import Lens.Micro.TH (makeLenses)
 import Opt
 import System.Random (StdGen, mkStdGen, randomR)
 
 data EventGen = EventGen
-  { egId :: EventId -- Last used event ID
-  , queue :: MinHeap EventKey -- Min-heap of event-identifiers sorted on event times
-  , events :: Map.Map EventId Event -- Mapping from event IDs to event structs
-  , endIds :: Map.Map (Cell, Ch) EventId -- Mapping from cell-channel pairs to END event IDs
+  { _egId :: EventId -- Last used event ID
+  , _queue :: Heap.MinHeap EventKey -- Min-heap of event-identifiers sorted on event times
+  , _events :: Map.Map EventId Event -- Mapping from event IDs to event structs
+  , _endIds :: Map.Map (Cell, Ch) EventId -- Mapping from cell-channel pairs to END event IDs
   }
 
-mkEventGen :: EventGen
-mkEventGen =
-  EventGen {egId = 0, queue = empty, events = Map.empty, endIds = Map.empty}
+makeLenses ''EventGen
 
-push ::
-     Double -> EType -> Cell -> Maybe Ch -> Maybe Cell -> EventGen -> EventGen
-push time etype cell endCh hoffCell eg =
-  eg {queue = queue', events = events', endIds = endIds', egId = id + 1}
-  where
-    id = egId eg
-    event = Event {eId = egId eg, time, etype, cell, endCh, hoffCell}
-    events' = Map.insert id event (events eg)
-    (queue', endIds') =
-      case endCh of
-        Nothing -> (queue eg, endIds eg)
-        Just ch ->
-          ( Heap.insert EventKey {ekTime = time, ekId = id} (queue eg)
-          , Map.insert (cell, ch) id $ endIds eg)
+mkEventGen :: EventGen
+mkEventGen = EventGen 0 Heap.empty Map.empty Map.empty
+
+push :: Double -> EType -> Cell -> Maybe Ch -> Maybe Cell -> State EventGen ()
+push time etype cell endCh hoffCell = do
+  id <- use egId
+  let event = Event {eId = id, time, etype, cell, endCh, hoffCell}
+  zoom events . modify' $ Map.insert id event
+  forM_
+    endCh
+    (\ch -> do
+       zoom queue . modify' $ Heap.insert EventKey {ekTime = time, ekId = id}
+       zoom endIds . modify' $ Map.insert (cell, ch) id)
+  return ()
 
 -- | Retrieve the highest priority event from the event generator
-pop :: EventGen -> (Event, EventGen)
-pop eg = (event, eg {queue = queue', events = events', endIds = endIds'})
-    -- Pop an identifier from the heap and retrieve the corresponding event
-    -- from the hashmap. Then delete the it from the hashmaps.
-  where
-    (eKey, queue') = fromJust $ view $ queue eg
-    eId = ekId eKey
-    event = events eg Map.! eId
-    events' = Map.delete eId $ events eg
-    endIds' =
-      case endCh event of
-        Nothing -> endIds eg
-        Just ch -> Map.delete (cell event, ch) $ endIds eg
+pop :: State EventGen Event
+pop
+  -- Pop an identifier from the heap and retrieve the corresponding event
+  -- from the hashmap. Then delete the it from the hashmaps.
+ = do
+  eKey <- zoom queue $ state (fromJust . Heap.view)
+  let eId = ekId eKey
+  event <-
+    zoom events $ do
+      event <- fmap (Map.! eId) get
+      modify' $ Map.delete eId
+      return event
+  forM_
+    (endCh event)
+    (\ch -> zoom endIds . modify' $ Map.delete (cell event, ch))
+  return event
 
 -- | Correct an event (and its keys) to reflect a channel reassignment
-reassign :: Cell -> Ch -> Ch -> EventGen -> EventGen
-reassign cell fromCh toCh eg = eg {endIds = endIds''}
-  where
-    (id, endIds') = mapRemove (cell, fromCh) $ endIds eg
-    endIds'' = Map.insert (cell, toCh) id endIds'
-    events' = Map.adjust (\event -> event {endCh = Just toCh}) id $ events eg
+reassign :: Cell -> Ch -> Ch -> State EventGen ()
+reassign cell fromCh toCh = do
+  id <-
+    zoom endIds $ do
+      id <- state $ mapRemove (cell, fromCh)
+      modify' $ Map.insert (cell, toCh) id
+      return id
+  zoom events . modify' $ Map.adjust (\event -> event {endCh = Just toCh}) id
+  return ()
 
-generateNewEvent ::
-     Double -> Cell -> EventGen -> StateT StdGen (Reader Opt) EventGen
-generateNewEvent time cell eg = do
+generateNewEvent :: Double -> Cell -> StateT (StdGen, EventGen) (Reader Opt) ()
+generateNewEvent time cell = do
   lam <- asks callRate
-  dt <- exponentialSt (1.0 / lam :: Double)
-  return $ push (time + dt) NEW cell Nothing Nothing eg
+  dt <- zoom _1 $ exponentialSt (1.0 / lam :: Double)
+  zoom _2 . return $ push (time + dt) NEW cell Nothing Nothing
+  return ()
 
 generateHoffNewEvent ::
-     Double -> Cell -> Ch -> EventGen -> StateT StdGen (Reader Opt) EventGen
-generateHoffNewEvent time cell ch eg = do
+     Double -> Cell -> Ch -> StateT (StdGen, EventGen) (Reader Opt) ()
+generateHoffNewEvent time cell ch = do
   lam <- asks callDurNew
-  dt <- exponentialSt (lam :: Double)
+  dt <- zoom _1 $ exponentialSt (lam :: Double)
   let neighs = getNeighs 2 cell False
-  neigh_i <- state $ randomR (0, length neighs - 1)
+  neigh_i <- zoom _1 $ state $ randomR (0, length neighs - 1)
   let toCell = neighs !! neigh_i
       t = time + dt
-      -- A termination event (END) immediately succeeded
-      -- by an arrival event (HOFF) in a neighboring cell
-      eg' = push t END cell (Just ch) (Just toCell) eg
-      eg'' = push t HOFF toCell Nothing Nothing eg'
-  return eg''
+  -- A termination event (END) immediately succeeded
+  -- by an arrival event (HOFF) in a neighboring cell
+  zoom _2 . return $ do
+    push t END cell (Just ch) (Just toCell)
+    push t HOFF toCell Nothing Nothing
+  return ()
 
 generateEndEvent ::
-     Double -> Cell -> Ch -> EventGen -> StateT StdGen (Reader Opt) EventGen
-generateEndEvent time cell ch eg = do
+     Double -> Cell -> Ch -> StateT (StdGen, EventGen) (Reader Opt) ()
+generateEndEvent time cell ch = do
   lam <- asks callDurNew
-  dt <- exponentialSt (lam :: Double)
-  return $ push (time + dt) END cell (Just ch) Nothing eg
+  dt <- zoom _1 $ exponentialSt (lam :: Double)
+  zoom _2 . return $ push (time + dt) END cell (Just ch) Nothing
+  return ()
 
 generateHoffEndEvent ::
-     Double -> Cell -> Ch -> EventGen -> StateT StdGen (Reader Opt) EventGen
-generateHoffEndEvent time cell ch eg = do
+     Double -> Cell -> Ch -> StateT (StdGen, EventGen) (Reader Opt) ()
+generateHoffEndEvent time cell ch = do
   lam <- asks callDurHoff
-  dt <- exponentialSt (lam :: Double)
-  return $ push (time + dt) END cell (Just ch) Nothing eg
+  dt <- zoom _1 $ exponentialSt (lam :: Double)
+  zoom _2 . return $ push (time + dt) END cell (Just ch) Nothing
+  return ()
 
 -- | Look up the value for a key 'k'; remove and return the value
 mapRemove :: Ord k => k -> Map.Map k a -> (a, Map.Map k a)
