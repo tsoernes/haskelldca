@@ -36,10 +36,7 @@ executable dca-exe
     , random
     , random-fu
     , time
-    , microlens
-    , microlens-mtl
-    , microlens-th
-    , microlens-ghc
+    , lens
 
 benchmark dca-bench
   type: exitcode-stdio-1.0

@@ -3,7 +3,7 @@
 module Stats where
 
 import Base
-import Data.Time.Clock
+import Data.Time.Clock (UTCTime, NominalDiffTime, diffUTCTime)
 import Text.Printf
 
 data Stats = Stats

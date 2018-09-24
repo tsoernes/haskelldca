@@ -11,28 +11,27 @@ module EventGen
   , generateEndEvent
   , generateHoffEndEvent
   , reassign
+  , mkEventGen'
+  , pop
+  , push
   ) where
 
-import Base
-import Control.Monad (forM_)
-import Control.Monad.Reader (Reader, asks)
-import Control.Monad.State (MonadState, State, StateT, get, modify', state)
-import Control.Monad.State.Lazy (State)
-import Data.Functor.Identity (Identity)
+import           Base
+import           Control.Monad (forM_, foldM)
+import           Control.Monad.Reader (Reader, asks, runReader)
+import           Control.Monad.State.Lazy (State, MonadState, StateT, get, put, modify', state, execStateT)
+import           Data.Functor.Identity (Identity)
 import qualified Data.Heap as Heap
 import qualified Data.Map.Strict as Map
-import Data.Maybe
-import Data.Random (MonadRandom, sampleState)
-import Data.Random.Distribution.Exponential (exponential)
-import Data.Random.Distribution.Uniform (integralUniform)
-import Data.Random.Lift (Lift)
-import Gridneighs (getNeighs)
-import Lens.Micro
-import Lens.Micro.GHC (at)
-import Lens.Micro.Mtl
-import Lens.Micro.TH (makeLenses)
-import Opt
-import System.Random (StdGen, mkStdGen, randomR)
+import           Data.Maybe (fromJust)
+import           Data.Random (MonadRandom, sampleState)
+import           Data.Random.Distribution.Exponential (exponential)
+import           Data.Random.Distribution.Uniform (integralUniform)
+import           Data.Random.Lift (Lift)
+import           Gridneighs (getNeighs)
+import           Control.Lens (makeLenses, use, zoom, at, _1, _2)
+import           Opt
+import           System.Random (StdGen, mkStdGen, randomR)
 
 data EventGen = EventGen
   { _egId :: EventId -- Last used event ID
@@ -43,8 +42,30 @@ data EventGen = EventGen
 
 makeLenses ''EventGen
 
-mkEventGen :: EventGen
-mkEventGen = EventGen 0 Heap.empty Map.empty Map.empty
+mkEventGen :: Opt -> StdGen -> (StdGen, EventGen)
+mkEventGen opt gen = foldl addEvent (gen, mke) gridIdxs
+  where
+    mke = EventGen 0 Heap.empty Map.empty Map.empty
+    addEvent :: (StdGen, EventGen) -> Cell -> (StdGen, EventGen)
+    addEvent (gen, eg) cell = runReader (execStateT (generateNewEvent 0.0 cell) (gen, eg)) opt
+
+mkEventGen' :: StdGen -> Reader Opt (StdGen, EventGen)
+mkEventGen' gen = foldM addEvent (gen, mke) gridIdxs
+  where
+    mke = EventGen 0 Heap.empty Map.empty Map.empty
+    addEvent :: (StdGen, EventGen) -> Cell -> Reader Opt (StdGen, EventGen)
+    addEvent (gen, eg) cell = execStateT (generateNewEvent 0.0 cell) (gen, eg)
+
+-- mkEventGen'' :: StateT StdGen (Reader Opt) EventGen
+-- mkEventGen'' = do
+--   gen <- get
+--   let mke = EventGen 0 Heap.empty Map.empty Map.empty
+--       addEvent :: () -> Cell -> StateT (StdGen, EventGen) (Reader Opt) ()
+--       addEvent _ cell = (generateNewEvent 0.0 cell)
+--   (gen', eg) <- execStateT (foldM addEvent () gridIdxs) (gen, mke)
+--   put gen'
+--   return eg
+
 
 push :: Double -> EType -> Cell -> Maybe Ch -> Maybe Cell -> State EventGen ()
 push time etype cell endCh hoffCell = do
@@ -63,7 +84,7 @@ pop :: State EventGen Event
 pop
   -- Pop an identifier from the heap and retrieve the corresponding event
   -- from the hashmap. Then delete the it from the hashmaps.
- = do
+  = do
   eKey <- zoom queue $ state (fromJust . Heap.view)
   let eId = ekId eKey
   event <-
@@ -125,7 +146,7 @@ generateHoffEndEvent time cell ch = do
   dt <- zoom _1 $ exponentialSt (lam :: Double)
   zoom _2 . return $ push (time + dt) END cell (Just ch) Nothing
   return ()
-
+  
 -- | Look up the value for a key 'k'; remove and return the value
 mapRemove :: Ord k => k -> Map.Map k a -> (a, Map.Map k a)
 mapRemove k map = (map Map.! k, Map.delete k map)

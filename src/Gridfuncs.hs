@@ -9,6 +9,9 @@ import Gridneighs
 import Base
 import qualified Prelude as P
 
+mkGrid :: Grid
+mkGrid = fill (constant (Z :. rows :. cols :. channels )) (lift False)
+
 -- | One-hot map of channels in use at cell neighbors with distance of 2 or less
 inuseMap :: Cell -> Grid -> GridCell
 inuseMap cell grid = P.foldl1 (zipWith (||)) (P.map (`sliceCell` grid) neighs)
@@ -103,6 +106,13 @@ boolSum2 = the . sum . flatten . map boolToInt
 incrementalFreps :: Grid -> Frep -> Cell -> EType -> Chs -> Freps
 incrementalFreps = undefined
 
+-- | Switch bit at given cell off for END events; on for NEW events
+executeAction :: Event -> Ch -> Grid -> Grid
+executeAction Event{etype, cell=(r, c)} toCh grid =
+    let val = unit $ lift $ etype P./= END
+        setIdx _ = constant (Z :. r :. c :. toCh)
+    in permute const grid setIdx val
+  
 -- | Create a rank-4 index from four Exp Int`s
 index4
     :: (Elt i, Slice (Z :. i), Slice (Z :. i :. i), Slice (Z :. i :. i :. i))
@@ -114,9 +124,3 @@ index4
 index4 k j i l = lift (Z :. k :. j :. i :. l)
 
 
--- | Switch bit at given cell off for END events; on for NEW events
-executeAction :: Event -> Ch -> Grid -> Grid
-executeAction Event{etype, cell=(r, c)} toCh grid =
-    let val = unit $ lift $ etype P./= END
-        setIdx _ = constant (Z :. r :. c :. toCh)
-    in permute const grid setIdx val
