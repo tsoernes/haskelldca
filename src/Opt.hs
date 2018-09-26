@@ -9,9 +9,9 @@ data Opt = Opt
   , hoffProb      :: Double
   , nEvents      :: Int
   , logIter      :: Int
-  , alphaNet      :: Double
-  , alphaAvg      :: Double
-  , alphaGrad      :: Double
+  , alphaNet      :: Float
+  , alphaAvg      :: Float
+  , alphaGrad      :: Float
   , verifyReuseConstraint :: Bool }
   deriving Show
 

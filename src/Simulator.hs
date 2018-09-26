@@ -5,9 +5,9 @@ module Simulator where
 
 import Stats
 import Gridneighs
-import Gridfuncs
+import Gridfuncs (boolSum2, executeAction, mkGrid, featureRep)
 import EventGen
-import Data.Array.Accelerate (the, Exp)
+import Data.Array.Accelerate (Exp)
 import Control.Monad.State (State, StateT, state, modify', runStateT, runState)
 import Control.Monad.Reader (Reader, asks)
 import Control.Monad (when, forM_, forM)
@@ -17,36 +17,41 @@ import Control.Arrow ((***), (&&&))
 import Base
 import Opt
 import Control.Lens (makeLenses, use, zoom, alongside, Lens', lens, view, set, _1, _2)
--- import Control.Lens
 import Data.Time.Clock (UTCTime)
 
 data SimState = SimState
   {
-    _grid :: Grid
-  -- , frep :: Frep -- Strictly speaking, the frep is not a part of the simulator
+    _ssGrid :: Grid
+  , _ssFrep :: Frep -- Strictly speaking, the frep is not a part of the simulator
   -- The next event for which an action must be selected and executed on 'grid'
-  , _event :: Event
-  , _eventgen :: EventGen
-  , _stats :: Stats
-  , _gen :: StdGen
+  , _ssEvent :: Event
+  , _ssEventgen :: EventGen
+  , _ssStats :: Stats
+  , _ssGen :: StdGen
   }
 
 makeLenses ''SimState
 
 mkSimState :: UTCTime -> StdGen -> Reader Opt SimState
 mkSimState time gen = do
-  (gen', eg) <- mkEventGen' gen :: Reader Opt (StdGen, EventGen)
+  (eg, gen') <- runStateT mkEventGen gen
   let (event, eg') = runState pop eg :: (Event, EventGen)
   li <- asks Opt.logIter
-  return $ SimState mkGrid event eg' (mkStats time li) gen'
+  let g = mkGrid
+      f = featureRep g
+  return $ SimState g f event eg' (mkStats time li) gen'
 
--- | Advance the simulator 1 step: Log statistics for the event and its corresponding action;
+
+-- | Advance the environment 1 step: Log statistics for the event and its corresponding action;
 -- | generate the new event(s); execute the action on the grid and return the resulting reward.
-simulatorStep :: Maybe Ch -> StateT SimState (Reader Opt) (Exp Int)
-simulatorStep act = do
-  ev <- use event
+environmentStep :: Maybe Ch -> StateT SimState (Reader Opt) (Exp Int)
+environmentStep act = do
+  ev <- use ssEvent
+  let eType = view evType ev
+      time = view evTime ev
+      cell = view evCell ev
   -- Log call events to Stats record
-  zoom stats $ case etype ev of
+  zoom ssStats $ case eType of
     NEW -> do
       modify' statsEventArrivalNew
       case act of
@@ -57,21 +62,21 @@ simulatorStep act = do
       when (isNothing act) $ modify' statsEventRejectNew
     END -> modify' statsEventEnd
   -- Generate call events
-  zoom (pairLens2 gen eventgen) $ case etype ev of
+  zoom (pairLens2 ssGen ssEventgen) $ case eType of
     NEW -> do
-      generateNewEvent (time ev) (cell ev)
+      generateNewEvent time cell
       forM_ act
         (\ch -> do
           p <- zoom _1 (state random :: StateT StdGen (Reader Opt) Double)
           ph <- asks hoffProb
           if p < ph
-            then generateHoffNewEvent (time ev) (cell ev) ch
-            else generateEndEvent (time ev) (cell ev) ch)
-    HOFF -> forM_ act (generateHoffEndEvent (time ev) (cell ev))
+            then generateHoffNewEvent time cell ch
+            else generateEndEvent time cell ch)
+    HOFF -> forM_ act (generateHoffEndEvent time cell)
     END -> return ()
-  -- Execute action on grid and return call count as reward
-  forM_ act (zoom grid . modify' . executeAction ev)
-  boolSum2 <$> use grid
+  -- Execute action, if any, on grid and return call count as reward
+  forM_ act (zoom ssGrid . modify' . executeAction ev)
+  boolSum2 <$> use ssGrid
 
 
 pairLens2 :: Lens' s x -> Lens' s y -> Lens' s (x,y)

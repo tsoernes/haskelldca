@@ -2,7 +2,7 @@ module Main where
 
 import Control.Monad.Reader
 import Opt
-import GridNeighs
+import Gridneighs
 import Gridfuncs
 import Base
 import Scratch

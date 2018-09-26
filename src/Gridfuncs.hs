@@ -1,16 +1,21 @@
 {-# LANGUAGE TypeOperators #-}
-{-#LANGUAGE NamedFieldPuns#-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE NamedFieldPuns#-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 module Gridfuncs where
 
 import Data.Array.Accelerate
-import Data.Array.Accelerate.Interpreter (run)
+import Data.Array.Accelerate.LLVM.Native (run)
 import Gridneighs
 import Base
 import qualified Prelude as P
 
 mkGrid :: Grid
-mkGrid = fill (constant (Z :. rows :. cols :. channels )) (lift False)
+mkGrid = fill (constant (Z :. rOWS :. cOLS :. cHANNELS)) (lift False)
+
+mkFrep :: Frep
+mkFrep = fill (constant (Z :. rOWS :. cOLS :. cHANNELS )) 0
 
 -- | One-hot map of channels in use at cell neighbors with distance of 2 or less
 inuseMap :: Cell -> Grid -> GridCell
@@ -77,19 +82,20 @@ afterstates grid (r, c) etype chs = permute const grids idxmap vals
     idxmap nsh = index4 (unindex1 nsh) (lift r) (lift c) (lift $ chs ! nsh)
 
 -- | A feature representation (frep for short) of the grid. The frep is of the
--- | same spatial dimension as the grid. For a given cell, the first 'CHANNELS' features
+-- | same spatial dimension as the grid but 1 longer in depth.
+-- | For a given cell, the first 'cHANNELS' features
 -- | specifies how many times each of the channels is in used within a 4-cell radius,
 -- | not including the cell itself. An additional feature counts the number of eligible
 -- | channels in that cell.
 featureRep :: Grid -> Frep
 featureRep grid = P.foldl fn zeros gridIdxs
   where
-    zeros = fill (constant (Z :. rows :. cols :. channels + 1)) 0
+    zeros = fill (constant (Z :. rOWS :. cOLS :. cHANNELS + 1)) 0
     -- Fill in 1 cell at a time
     fn :: Frep -> Cell -> Frep
     fn frep (r,c) = permute const frep idxmap (nUsed ++ nElig)
       where
-        nUsedZ = fill (constant (Z :. channels + 1)) 0 :: Acc (Vector Int)
+        nUsedZ = fill (constant (Z :. cHANNELS + 1)) 0 :: Acc (Vector Int)
         neighs4 = getNeighs 4 (r, c) False
         nUsed = P.foldl (\acc cell -> zipWith (+) acc (map boolToInt $ sliceCell cell grid)) nUsedZ neighs4
         nElig = reshape (constant (Z :. 1)) . boolSum $ eligibleMap (r,c) grid
@@ -108,8 +114,8 @@ incrementalFreps = undefined
 
 -- | Switch bit at given cell off for END events; on for NEW events
 executeAction :: Event -> Ch -> Grid -> Grid
-executeAction Event{etype, cell=(r, c)} toCh grid =
-    let val = unit $ lift $ etype P./= END
+executeAction Event{_evType, _evCell=(r, c)} toCh grid =
+    let val = unit $ lift $ _evType P./= END
         setIdx _ = constant (Z :. r :. c :. toCh)
     in permute const grid setIdx val
   

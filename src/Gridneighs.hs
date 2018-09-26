@@ -25,7 +25,7 @@ import Base
 --   where
 --     (neighsLi, nNeighsLi, n) = foldl inner ([], [], 0) idxs
 --     neighsArr = use $ fromList (Z :. n) neighsLi
---     nNeighsArr = use $ fromList (Z :. rows :. cols :. 5) nNeighsLi
+--     nNeighsArr = use $ fromList (Z :. rOWS :. cOLS :. 5) nNeighsLi
 --     inner (neighs', nNeighs', n') idx = (neighs' ++ cellNeighs, nNeighs'', n'')
 --       where
 --         (cellNeighs, cellNNeighs) = neighborhood idx
@@ -73,6 +73,6 @@ periphery' d (r,c) =
   
 isValid :: Cell -> Bool
 isValid (r, c)
-  | r < 0 || r >= rows = False
-  | c < 0 || c >= cols = False
+  | r < 0 || r >= rOWS = False
+  | c < 0 || c >= cOLS = False
   | otherwise = True

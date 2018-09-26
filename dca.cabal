@@ -29,6 +29,8 @@ executable dca-exe
   build-depends:       
       base >= 4.7 && < 5
     , accelerate
+    , accelerate-llvm-native
+    , linear-accelerate
     , containers
     , optparse-applicative
     , mtl

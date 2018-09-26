@@ -11,14 +11,14 @@ module EventGen
   , generateEndEvent
   , generateHoffEndEvent
   , reassign
-  , mkEventGen'
+  , mkEventGen
   , pop
   , push
   ) where
 
 import           Base
 import           Control.Monad (forM_, foldM)
-import           Control.Monad.Reader (Reader, asks, runReader)
+import           Control.Monad.Reader (Reader, asks, runReader, lift)
 import           Control.Monad.State.Lazy (State, MonadState, StateT, get, put, modify', state, execStateT)
 import           Data.Functor.Identity (Identity)
 import qualified Data.Heap as Heap
@@ -29,7 +29,7 @@ import           Data.Random.Distribution.Exponential (exponential)
 import           Data.Random.Distribution.Uniform (integralUniform)
 import           Data.Random.Lift (Lift)
 import           Gridneighs (getNeighs)
-import           Control.Lens (makeLenses, use, zoom, at, _1, _2)
+import           Control.Lens (makeLenses, use, zoom, at, _1, _2, assign, view, set)
 import           Opt
 import           System.Random (StdGen, mkStdGen, randomR)
 
@@ -42,41 +42,27 @@ data EventGen = EventGen
 
 makeLenses ''EventGen
 
-mkEventGen :: Opt -> StdGen -> (StdGen, EventGen)
-mkEventGen opt gen = foldl addEvent (gen, mke) gridIdxs
-  where
-    mke = EventGen 0 Heap.empty Map.empty Map.empty
-    addEvent :: (StdGen, EventGen) -> Cell -> (StdGen, EventGen)
-    addEvent (gen, eg) cell = runReader (execStateT (generateNewEvent 0.0 cell) (gen, eg)) opt
 
-mkEventGen' :: StdGen -> Reader Opt (StdGen, EventGen)
-mkEventGen' gen = foldM addEvent (gen, mke) gridIdxs
-  where
-    mke = EventGen 0 Heap.empty Map.empty Map.empty
-    addEvent :: (StdGen, EventGen) -> Cell -> Reader Opt (StdGen, EventGen)
-    addEvent (gen, eg) cell = execStateT (generateNewEvent 0.0 cell) (gen, eg)
-
--- mkEventGen'' :: StateT StdGen (Reader Opt) EventGen
--- mkEventGen'' = do
---   gen <- get
---   let mke = EventGen 0 Heap.empty Map.empty Map.empty
---       addEvent :: () -> Cell -> StateT (StdGen, EventGen) (Reader Opt) ()
---       addEvent _ cell = (generateNewEvent 0.0 cell)
---   (gen', eg) <- execStateT (foldM addEvent () gridIdxs) (gen, mke)
---   put gen'
---   return eg
-
+mkEventGen :: StateT StdGen (Reader Opt) EventGen
+mkEventGen = do
+  gen <- get
+  let mke = EventGen 0 Heap.empty Map.empty Map.empty
+      addEvent :: () -> Cell -> StateT (StdGen, EventGen) (Reader Opt) ()
+      addEvent _ = generateNewEvent 0.0
+  (gen', eg) <- lift $ execStateT (foldM addEvent () gridIdxs) (gen, mke)
+  put gen'
+  return eg
 
 push :: Double -> EType -> Cell -> Maybe Ch -> Maybe Cell -> State EventGen ()
 push time etype cell endCh hoffCell = do
-  id <- use egId
-  let event = Event {eId = id, time, etype, cell, endCh, hoffCell}
-  zoom events . modify' $ Map.insert id event
+  eId <- use egId :: State EventGen Int
+  let event = Event eId time etype cell endCh hoffCell
+  zoom events . modify' $ Map.insert eId event
   forM_
     endCh
     (\ch -> do
-       zoom queue . modify' $ Heap.insert EventKey {ekTime = time, ekId = id}
-       zoom endIds . modify' $ Map.insert (cell, ch) id)
+       zoom queue . modify' $ Heap.insert EventKey {ekTime = time, ekId = eId}
+       zoom endIds . modify' $ Map.insert (cell, ch) eId)
   return ()
 
 -- | Retrieve the highest priority event from the event generator
@@ -93,8 +79,8 @@ pop
       modify' $ Map.delete eId
       return event
   forM_
-    (endCh event)
-    (\ch -> zoom endIds . modify' $ Map.delete (cell event, ch))
+    (view evEndCh event)
+    (\ch -> zoom endIds . modify' $ Map.delete (view evCell event, ch))
   return event
 
 -- | Correct an event (and its keys) to reflect a channel reassignment
@@ -105,7 +91,7 @@ reassign cell fromCh toCh = do
       id <- state $ mapRemove (cell, fromCh)
       modify' $ Map.insert (cell, toCh) id
       return id
-  zoom events . modify' $ Map.adjust (\event -> event {endCh = Just toCh}) id
+  zoom events . modify' $ Map.adjust (set evEndCh (Just toCh)) id
   return ()
 
 generateNewEvent :: Double -> Cell -> StateT (StdGen, EventGen) (Reader Opt) ()
