@@ -5,21 +5,33 @@ import Data.Array.Accelerate (Acc, Array, DIM1, DIM2, DIM3, Z(..), (:.)(..), (!)
 import Data.Array.Accelerate.Interpreter (run)
 import Base
 
+-- (V     , M)
 -- (neighs, nNeighs) = generateNeighs
 
 -- -- Return a vector of indices of cells at distance 'd' or less from the given cell.
 -- -- The boolean parameter determines if the given cell itself is included in the list.
--- getNeighs :: Int -> Cell -> Bool -> Acc (Array DIM1 Cell)
--- getNeighs d (r,c) includeself = A.take n $ A.drop start' neighs
+-- getNeighboorhood :: Int -> Cell -> Bool -> Acc (Array DIM1 Cell)
+-- getNeighhoorhood d (r,c) includeself = A.take n $ A.drop start' neighs
 --   where
 --     start = nNeighs ! A.constant (Z :. r :. c :. 0)
 --     start' = if includeself then start else start + 1
 --     n = nNeighs ! A.constant (Z :. r :. c :. d)
 
--- -- The second matrix has entries for each (row, col) pair of the form
--- -- [n, n1, n2, n3, n4] where 'n' is the start position in the first vector.
--- -- The range 'neighs[n..n1]' yields the indices of neighbors with distance 1
--- -- for the cell (row, col) and similarly for n2, n3 and n4.
+-- -- Returns a vector V of cells and a matrix M of integers.
+-- -- M is of shape RxCx5 where R and C are the number of
+-- -- rows and columns in the grid and thus has
+-- -- a vector (henceforth M[r, c]) of length 5 for each cell (r, c) in grid.
+-- -- For a given cell (r, c), the vector M[r, c] contains 5 integer
+-- -- entries that can be used to look up any
+-- -- d-distance neighborhood for the given cell for d in the inclusive range of [1..4].
+-- -- The definition of a d-distance neighborhood is given in the documentation of
+-- -- the `getNeighboorhood` function which can later be used to perform
+-- -- the retrieval of said neighborhoods.
+-- -- The retrieval utilizes M[r, c][0] and M[r, c][d] to return a slice (range) of
+-- -- the vector V. This slice contains the set of cells which form the d-distance
+-- -- neighborhood of (r, c).
+-- -- Specifically, for M[r, c]=[n, n_1, n_2, n_3, n_4], the inclusive slice of cells V[n:n_d]
+-- -- yield the d-distance neighborhood for d in [1..4].
 -- generateNeighs :: (Acc (Array DIM1 Cell), Acc (Array DIM3 Int))
 -- generateNeighs = (neighsArr, nNeighsArr)
 --   where

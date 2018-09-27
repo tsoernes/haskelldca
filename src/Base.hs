@@ -22,12 +22,11 @@ data EType = NEW | END | HOFF deriving (Show, Eq, Ord)
 type EventId = Int
 
 data Event = Event {
-  _evId :: EventId,
-  _evTime :: Double,
+  _evTime :: Double, -- Time when event takes place
   _evType :: EType,
   _evCell :: Cell,
-  _evEndCh :: Maybe Ch, -- For END events only
-  _evHoffCell :: Maybe Cell -- For HOFF events only
+  _evEndCh :: Maybe Ch, -- The channel currently in use to be terminated (for END events only)
+  _evHoffCell :: Maybe Cell -- The cell to which the call will be handed off (for HOFF events only)
   } deriving Eq
 
 makeLenses ''Event
@@ -41,4 +40,3 @@ instance Ord EventKey where
   e1 `compare` e2 = case ekTime e1 `compare` ekTime e2 of
     EQ -> ekId e1 `compare` ekId e2
     x -> x
-

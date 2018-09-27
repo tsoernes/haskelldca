@@ -5,6 +5,7 @@
 {-# LANGUAGE PartialTypeSignatures #-}
 module Gridfuncs where
 
+import Control.Arrow ((&&&), (***), first)
 import Data.Array.Accelerate
 import Data.Array.Accelerate.LLVM.Native (run)
 import Gridneighs
@@ -16,6 +17,9 @@ mkGrid = fill (constant (Z :. rOWS :. cOLS :. cHANNELS)) (lift False)
 
 mkFrep :: Frep
 mkFrep = fill (constant (Z :. rOWS :. cOLS :. cHANNELS )) 0
+
+mkFreps :: Exp Int -> Freps
+mkFreps i = fill (index4 (lift i) (lift rOWS) (lift cOLS) (lift cHANNELS)) 0
 
 -- | One-hot map of channels in use at cell neighbors with distance of 2 or less
 inuseMap :: Cell -> Grid -> GridCell
@@ -43,17 +47,27 @@ sliceCell (r, c) grid = slice grid (constant (Z :. r :. c :. All))
 -- | Return the eligible channels for the given cell. A channel is eligible if it is free at
 -- | the cell and all of its neighbors with distance of 2 or less.
 eligibleChs :: Cell -> Grid -> Chs
-eligibleChs cell grid = elig
+eligibleChs cell grid = indicesOf $ eligibleMap cell grid
+
+
+-- | Return the eligible channels for the given cell. A channel is eligible if it is free at
+-- | the cell and all of its neighbors with distance of 2 or less.
+inuseChs :: Cell -> Grid -> Chs
+inuseChs cell grid = indicesOf $ inuseMap cell grid
+
+
+-- | Convert a one-hot vector (sparse repr) to a vector of indecies (dense repr)
+indicesOf :: Acc (Array DIM1 Bool) -> Acc (Array DIM1 Int)
+indicesOf arr = iHot
   where
-    emap = eligibleMap cell grid
-    -- Pair up every element with its index
-    iemap = indexed emap :: Acc (Array DIM1 (DIM1, Bool))
-    -- Filter out (index, elig) pairs that are not eligible
-    ielig = filter snd iemap :: Acc (Array DIM1 (DIM1, Bool), Array DIM0 Int)
+    -- Pair up every element with its index (as Shape)
+    seArr = indexed arr :: Acc (Array DIM1 (DIM1, Bool))
+    -- Filter out (index, elem) pairs where elem is not True
+    seHot = filter snd seArr :: Acc (Array DIM1 (DIM1, Bool), Array DIM0 Int)
     -- Keep only the indices (as ints)
-    uielig = unlift ielig :: (Acc (Array DIM1 (DIM1, Bool)), Acc (Array DIM0 Int))
-    puielig = P.fst uielig :: Acc (Array DIM1 (DIM1, Bool))
-    elig = map (unindex1 . fst) puielig :: Acc (Array DIM1 Int)
+    pair = unlift seHot :: (Acc (Array DIM1 (DIM1, Bool)), Acc (Array DIM0 Int))
+    sHot = P.fst pair :: Acc (Array DIM1 (DIM1, Bool))
+    iHot = map (unindex1 . fst) sHot :: Acc (Array DIM1 Int)
 
 -- Throws an error if the reuse constraint is violated
 -- validateReuseConstraint :: Grid -> Bool
@@ -129,4 +143,83 @@ index4
     -> Exp (Z :. i :. i :. i :. i)
 index4 k j i l = lift (Z :. k :. j :. i :. l)
 
+vvMul :: Num a => Acc (Vector a) -> Acc (Vector a) -> Acc (Scalar a)
+vvMul xs ys = fold (+) 0 ( zipWith (*) xs ys )
 
+mvMul :: Num a => Acc (Matrix a) -> Acc (Vector a) -> Acc (Vector a)
+mvMul mat vec =
+  let Z :. rows :. _ = unlift (shape mat) :: Z :. Exp Int :. Exp Int
+      vec'              = replicate (lift (Z :. rows :. All)) vec
+  in
+  fold (+) 0 ( zipWith (*) mat vec' )
+
+mmMul :: Num a => Acc (Matrix a) -> Acc (Matrix a) -> Acc (Matrix a)
+mmMul mat1 mat2 = undefined
+
+outer ::
+   (Num a) =>
+   Acc (Vector a) -> Acc (Vector a) -> Acc (Matrix a)
+outer x y =
+   zipWith (*)
+      (replicate (lift $ Any :. All :. length y) x)
+      (replicate (lift $ Any :. length x :. All) y)
+
+multiplyMatrixVector :: (Num a) =>
+   Acc (Matrix a) ->
+   Acc (Vector a) ->
+   Acc (Vector a)
+multiplyMatrixVector m v =
+  let rows = fst . unindex2 $ shape m :: Exp Int
+  in fold1 (+) $ zipWith (*) m (replicate (lift $ Any :. rows :. All) v)
+
+multiplyMatrixMatrix ::
+   (Num a) =>
+   Acc (Matrix a) ->
+   Acc (Matrix a) ->
+   Acc (Matrix a)
+multiplyMatrixMatrix x y =
+  let rows = fst . unindex2 $ shape x :: Exp Int
+      cols = snd . unindex2 $ shape y :: Exp Int
+      a1 = replicate (lift $ Z :. All :. All :. cols) x :: Acc (Array DIM3 _)
+      a2 = replicate (lift $ Z :. rows :. All :. All) y :: Acc (Array DIM3 _)
+      b = zipWith (*) a1 a2 :: Acc (Array DIM3 _)
+      -- c = transpose b
+  -- in fold1 (+) $ c
+  in undefined
+
+(#*#) :: (Num a) =>
+    Acc (Array DIM2 a) -> Acc (Array DIM2 a) -> Acc (Array DIM2 a)
+v #*# w = let (k, m) = unlift . unindex2 $ shape v :: (Exp Int, Exp Int)
+              (m', n) = unlift . unindex2 $ shape w :: (Exp Int, Exp Int)
+          in generate (index2 k n) (aux v w)
+          where aux :: (Num e) => Acc (Array DIM2 e) -> Acc (Array DIM2 e) -> Exp DIM2 -> Exp e
+                aux v w sh = let (i, j) = unlift $ unindex2 sh :: (Exp Int, Exp Int)
+                                 v' = slice v (lift $ Z:.i:.All)
+                                 w' = slice w (lift $ Z:.All:.j)
+                              in the $ sum $ zipWith (*) v' w'
+  
+
+runExp :: (Elt a) => Exp a -> a
+runExp expa = indexArray (run $ unit expa) Z
+
+-- foldMax :: (Ord a, Elt a, Shape sh) => Acc (Array sh a) -> (Exp sh, Exp a)
+-- foldMax arr = fold1All fn (flatten $ indexed arr)
+--   where
+--     fn :: (Elt sh, Ord e, Elt e) => Exp (sh, e) -> Exp (sh, e) -> Exp (sh, e)
+--     fn a b = cond (snd a > snd b) a b
+    
+-- | Argmax plus max: Return (idx :: sh, val) pair for the largest element in the array
+argpmax :: (Ord a, Elt a, Shape sh) => Acc (Array sh a) -> (Exp sh, Exp a)
+argpmax arr = unlift $ the x
+  where
+    x = fold1All fn (flatten $ indexed arr)
+    fn :: (Elt sh, Ord e, Elt e) => Exp (sh, e) -> Exp (sh, e) -> Exp (sh, e)
+    fn a b = cond (snd a > snd b) a b
+
+
+-- | Return (idx :: Int, val) pair for the largest element in the vector
+argpmax1 :: (Ord a, Elt a) => Acc (Array DIM1 a) -> (Exp Int, Exp a)
+argpmax1 = first unindex1 . argpmax
+
+expand :: Exp Int -> Acc (Array DIM1 Int)
+expand = replicate (constant (Z :. (3::Int))) . unit

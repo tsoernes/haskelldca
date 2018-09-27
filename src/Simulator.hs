@@ -4,19 +4,18 @@
 module Simulator where
 
 import Stats
-import Gridneighs
 import Gridfuncs (boolSum2, executeAction, mkGrid, featureRep)
 import EventGen
 import Data.Array.Accelerate (Exp)
-import Control.Monad.State (State, StateT, state, modify', runStateT, runState)
+import Control.Monad.State (StateT, state, modify', runStateT, runState)
 import Control.Monad.Reader (Reader, asks)
-import Control.Monad (when, forM_, forM)
+import Control.Monad (when, forM_)
 import Data.Maybe (isNothing)
 import System.Random (StdGen, random)
-import Control.Arrow ((***), (&&&))
+import Control.Arrow ((&&&))
 import Base
 import Opt
-import Control.Lens (makeLenses, use, zoom, alongside, Lens', lens, view, set, _1, _2)
+import Control.Lens (makeLenses, use, zoom, Lens', lens, view, set, _1)
 import Data.Time.Clock (UTCTime)
 
 data SimState = SimState
@@ -55,7 +54,7 @@ environmentStep act = do
     NEW -> do
       modify' statsEventArrivalNew
       case act of
-        Just ch -> modify' statsEventAcceptNew
+        Just _ -> modify' statsEventAcceptNew
         Nothing -> modify' statsEventRejectNew
     HOFF -> do
       modify' statsEventArrivalHoff

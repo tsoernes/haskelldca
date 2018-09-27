@@ -1,11 +1,13 @@
-flags: {}
+flags: 
+        accelerate-blas:
+                llvm-ptx: false
 packages:
 - .
 extra-deps:
 - accelerate-1.2.0.0
 - accelerate-llvm-1.2.0.0
 - accelerate-llvm-native-1.2.0.0
-- linear-accelerate-0.6.0.0
+- accelerate-blas-0.2.0.0
 - llvm-hs-6.0.0
 - llvm-hs-pure-6.0.0
 resolver: lts-12.10
