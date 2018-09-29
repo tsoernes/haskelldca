@@ -3,8 +3,8 @@
 module Stats where
 
 import Base
-import Data.Time.Clock (UTCTime, NominalDiffTime, diffUTCTime)
-import Text.Printf
+import Data.Time.Clock (NominalDiffTime, UTCTime, diffUTCTime)
+import Text.Printf (printf)
 
 data Stats = Stats
     -- Start time in wall clock time, used to determine simulation execution duration
@@ -28,7 +28,7 @@ data Stats = Stats
   , nRejectedHoff :: Int
     -- Block prob during each log iter period
   , blockProbs :: [Double]
-    -- For each log_iter;
+    -- For each log iter;
     -- cumulative new/hand-off/total call blocking probability thus far
     -- NOTE: This are stored newest first
   , cumBlockProbsNew :: [Double]
