@@ -33,10 +33,13 @@ executable dca-exe
     , accelerate-blas
     , containers
     , optparse-applicative
+    , rvar
     , mtl
     , heap
     , random
     , random-fu
+    , random-source
+    , mersenne-random-pure64
     , time
     , lens
 
