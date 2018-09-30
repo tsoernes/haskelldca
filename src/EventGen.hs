@@ -7,19 +7,19 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE Rank2Types #-}
 
-module EventGen
-  ( EventGen
-  , generateNewEvent
-  , generateHoffNewEvent
-  , generateEndEvent
-  , generateHoffEndEvent
-  , reassign
-  , mkEventGen
-  , pop
-  , push
-  , statePart
-  , modifyPart
-  ) where
+module EventGen where
+  -- ( EventGen
+  -- , generateNewEvent
+  -- , generateHoffNewEvent
+  -- , generateEndEvent
+  -- , generateHoffEndEvent
+  -- , reassign
+  -- , mkEventGen
+  -- , pop
+  -- , push
+  -- , statePart
+  -- , modifyPart
+  -- ) where
 
 import Base
     ( Cell,
@@ -32,15 +32,16 @@ import Base
       evEndCh,
       gridIdxs )
 import Control.Lens
-    ( Lens', use, view, over, set, makeLenses, Zoom(zoom) )
+    ( ALens', Lens', use, view, over, set, makeLenses, Zoom(zoom), (^#), (#~), (#%~) )
 import Control.Monad ( foldM, forM_ )
 import Control.Monad.Reader ( MonadReader, asks )
 import Control.Monad.State.Lazy
-    ( MonadState(state), State, StateT, execStateT, gets, modify' )
+    ( MonadState(state), State, StateT, execStateT, gets, modify', runStateT)
 import qualified Data.Heap as Heap ( MinHeap, empty, insert, view )
 import qualified Data.Map.Strict as Map
     ( Map, (!), adjust, delete, empty, insert )
 import Data.Maybe ( fromJust )
+import Utils
 import Data.RVar ( getRandomDouble, getRandomWord64, sampleRVar )
 import Data.Random ( MonadRandom, uniform )
 import Data.Random.Distribution.Exponential ( exponential )
@@ -133,28 +134,6 @@ pop
     (\ch -> modifyPart endIds (Map.delete (view evCell event, ch)))
   return event
 
--- liftState :: (MonadState s ms, MonadState t mt) => ALens' s t -> mt a -> ms a
--- liftState l m = state $ \s -> case runState m $ s ^# l of
---                                (a, b) -> (a, s & l #~ b)
--- | Using a lens, zoom in on a part of the state, apply the monadic action
--- and return the result.
-statePart :: (MonadState s m) => Lens' s s' -> (s' -> (a, s')) -> m a
-statePart lenss act = do
-  s <- use lenss
-  let (a, s') = act s
-  modify' (set lenss s')
-  return a
-
--- -- | Using a lens, zoom in on a part of the state, apply the monadic action
--- -- and return the result.
--- statePartM :: (MonadState s m) => Lens' s s' -> m (a, s') -> m ()
--- statePartM lenss act = do
---   modify' $ over lenss (map snd act)
---   return ()
--- | Using a lens, zoom in on a part of the state, apply the state transformer
-modifyPart :: (MonadState s m) => Lens' s s' -> (s' -> s') -> m ()
-modifyPart lenss mod = modify' (over lenss mod)
-
 -- | Correct an event (and its keys) to reflect a channel reassignment
 reassign :: Cell -> Ch -> Ch -> State EventGen ()
 reassign cell fromCh toCh = do
@@ -229,3 +208,4 @@ generateHoffEndEvent time cell ch =
 -- | Look up the value for a key 'k'; remove and return the value
 mapRemove :: Ord k => k -> Map.Map k a -> (a, Map.Map k a)
 mapRemove k mapp = (mapp Map.! k, Map.delete k mapp)
+

@@ -25,6 +25,8 @@ executable dca-exe
     , Stats
     , EventGen
     , Simulator
+    , Utils
+    , Agent
     , Scratch
   build-depends:       
       base >= 4.7 && < 5

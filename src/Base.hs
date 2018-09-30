@@ -3,7 +3,7 @@
 module Base where
 
 import Control.Lens (makeLenses)
-import Data.Array.Accelerate (Acc, Array, DIM1, DIM3, DIM4)
+import Data.Array.Accelerate (Acc, Array, DIM1, DIM3, DIM4, Exp, fill, constant, Z(..), (:.)(..))
 
 rOWS = 7 :: Int
 
@@ -58,3 +58,15 @@ instance Ord EventKey where
     case ekTime e1 `compare` ekTime e2 of
       EQ -> ekId e1 `compare` ekId e2
       x -> x
+
+data Agent = Agent
+  { avgReward :: Exp Float
+  , wNet :: Acc (Array DIM1 Float)
+  , wGradCorr :: Acc (Array DIM1 Float)
+  }
+
+mkAgent :: Agent
+mkAgent = Agent 0.0 mk mk
+  where
+    mk = fill (constant (Z :. rOWS * cOLS * (cHANNELS + 1))) 0.0
+

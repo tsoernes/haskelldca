@@ -1,146 +1,132 @@
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Stats where
 
-import Base
-import Data.Time.Clock (NominalDiffTime, UTCTime, diffUTCTime)
+import Control.Lens
+import Control.Monad.Reader (MonadReader, asks)
+import Control.Monad.State (MonadState, gets)
+import Opt
 import Text.Printf (printf)
 
 data Stats = Stats
-    -- Start time in wall clock time, used to determine simulation execution duration
-  { startTime :: UTCTime
-  , logIter :: Int
     -- Number of call arrivals this log_iter period (not including hand-offs)
-  , nCurrArrivalsNew :: Int
+  { _nCurrArrivalsNew :: Int
     -- Number of call arrivals (not including hand-offs)
-  , nArrivalsNew :: Int
+  , _nArrivalsNew :: Int
     -- Number of accepted call arrivals (not including hand-offs)
-  , nAcceptedNew :: Int
+  , _nAcceptedNew :: Int
     -- Number of hand-offs arrival
-  , nArrivalsHoff :: Int
+  , _nArrivalsHoff :: Int
     -- Number of ended calls (including handed-off calls)
-  , nEnded :: Int
+  , _nEnded :: Int
     -- Number of rejected calls this log_iter period (not including hand-offs)
-  , nCurrRejectedNew :: Int
+  , _nCurrRejectedNew :: Int
     -- Number of rejected calls (not including hand-offs)
-  , nRejectedNew :: Int
+  , _nRejectedNew :: Int
     -- Number of rejected hand-offs
-  , nRejectedHoff :: Int
+  , _nRejectedHoff :: Int
     -- Block prob during each log iter period
-  , blockProbs :: [Double]
+  , _blockProbs :: [Double]
     -- For each log iter;
     -- cumulative new/hand-off/total call blocking probability thus far
     -- NOTE: This are stored newest first
-  , cumBlockProbsNew :: [Double]
-  , cumBlockProbsHoff :: [Double]
-  , cumBlockProbsTot :: [Double]
+  , _cumuBlockProbsNew :: [Double]
+  , _cumuBlockProbsHoff :: [Double]
+  , _cumuBlockProbsTot :: [Double]
   }
 
-mkStats :: UTCTime -> Int -> Stats
-mkStats startTime logIter =
+makeLenses ''Stats
+
+mkStats :: Stats
+mkStats =
   Stats
-    { startTime
-    , logIter
-    , nCurrArrivalsNew = 0
-    , nArrivalsNew = 0
-    , nAcceptedNew = 0
-    , nArrivalsHoff = 0
-    , nEnded = 0
-    , nCurrRejectedNew = 0
-    , nRejectedNew = 0
-    , nRejectedHoff = 0
-    , blockProbs = []
-    , cumBlockProbsNew = []
-    , cumBlockProbsHoff = []
-    , cumBlockProbsTot = []
+    { _nCurrArrivalsNew = 0
+    , _nArrivalsNew = 0
+    , _nAcceptedNew = 0
+    , _nArrivalsHoff = 0
+    , _nEnded = 0
+    , _nCurrRejectedNew = 0
+    , _nRejectedNew = 0
+    , _nRejectedHoff = 0
+    , _blockProbs = []
+    , _cumuBlockProbsNew = []
+    , _cumuBlockProbsHoff = []
+    , _cumuBlockProbsTot = []
     }
 
-statsEventArrivalNew :: Stats -> Stats
-statsEventArrivalNew stats =
-  stats
-    { nCurrArrivalsNew = nCurrArrivalsNew stats + 1
-    , nArrivalsNew = nArrivalsNew stats + 1
-    }
+statsEventArrivalNew :: (MonadState Stats m) => m ()
+statsEventArrivalNew = do
+  nCurrArrivalsNew += 1
+  nArrivalsNew += 1
 
-statsEventArrivalHoff :: Stats -> Stats
-statsEventArrivalHoff stats = stats {nArrivalsHoff = nArrivalsHoff stats + 1}
+statsEventArrivalHoff :: (MonadState Stats m) => m ()
+statsEventArrivalHoff = nArrivalsHoff += 1
 
-statsEventAcceptNew :: Stats -> Stats
-statsEventAcceptNew stats = stats {nAcceptedNew = nAcceptedNew stats + 1}
+statsEventAcceptNew :: (MonadState Stats m) => m ()
+statsEventAcceptNew = nAcceptedNew += 1
 
-statsEventRejectNew :: Stats -> Stats
-statsEventRejectNew stats =
-  stats
-    { nRejectedNew = nRejectedNew stats + 1
-    , nCurrRejectedNew = nCurrRejectedNew stats + 1
-    }
+statsEventRejectNew :: (MonadState Stats m) => m ()
+statsEventRejectNew = do
+  nRejectedNew += 1
+  nCurrRejectedNew += 1
 
-statsEventRejectHoff :: Stats -> Stats
-statsEventRejectHoff stats = stats {nRejectedHoff = nRejectedHoff stats + 1}
+statsEventRejectHoff :: (MonadState Stats m) => m ()
+statsEventRejectHoff = nRejectedHoff += 1
 
-statsEventEnd :: Stats -> Stats
-statsEventEnd stats = stats {nEnded = nEnded stats + 1}
+statsEventEnd :: (MonadState Stats m) => m ()
+statsEventEnd = nEnded += 1
 
 statsCums :: Stats -> (Double, Double, Double)
-statsCums stats = (cumNew, cumHoff, cumTot)
+statsCums stats = (cumuNew, cumuHoff, cumuTot)
   where
-    rejNew = fromIntegral $ nRejectedNew stats
-    arrNew = fromIntegral $ nArrivalsNew stats
-    cumNew = rejNew / (arrNew + 1.0)
-    rejHoff = fromIntegral $ nRejectedHoff stats
-    arrHoff = fromIntegral $ nArrivalsHoff stats
-    cumHoff = rejHoff / (arrHoff + 1.0)
-    cumTot = (rejNew + rejHoff) / (arrNew + arrHoff + 1.0)
+    rejNew = fromIntegral $ stats ^. nRejectedNew
+    arrNew = fromIntegral $ stats ^. nArrivalsNew
+    cumuNew = rejNew / (arrNew + 1.0) :: Double
+    rejHoff = fromIntegral $ stats ^. nRejectedHoff
+    arrHoff = fromIntegral $ stats ^. nArrivalsHoff
+    cumuHoff = rejHoff / (arrHoff + 1.0)
+    cumuTot = (rejNew + rejHoff) / (arrNew + arrHoff + 1.0)
 
-statsReportLogIter :: Int -> Stats -> (String, Stats)
-statsReportLogIter i stats = (str, stats')
-  where
-    (cumNew, cumHoff, cumTot) = statsCums stats
-        -- Blocking probability for new calls during the last period of 'logIter' iterations
-    logIterNew =
-      fromIntegral (nCurrRejectedNew stats) /
-      fromIntegral (nCurrRejectedNew stats + 1) :: Double
-    str =
-      printf
-        "Blocking probability events %d-%d: %.4f, cumulative %.4f"
-        (i - logIter stats)
-        i
-        logIterNew
-        cumNew
-    cumsNew = cumNew : cumBlockProbsNew stats
-    cumsHoff = cumHoff : cumBlockProbsHoff stats
-    cumsTot = cumTot : cumBlockProbsTot stats
-    stats' =
-      stats
-        { nCurrArrivalsNew = 0
-        , nCurrRejectedNew = 0
-        , cumBlockProbsNew = cumsNew
-        , cumBlockProbsHoff = cumsHoff
-        , cumBlockProbsTot = cumsTot
-        }
+statsReportLogIter :: (MonadReader Opt m, MonadState Stats m) => Int -> m String
+statsReportLogIter i = do
+  (cumuNew, cumuHoff, cumuTot) <- gets statsCums
+  nRej <- use nCurrRejectedNew
+  nArr <- use nCurrArrivalsNew
+  li <- asks logIter
+  let logIterBpNew = fromIntegral nRej / fromIntegral (nArr + 1) :: Double
+      -- ^ Blocking probability for new calls during the last period of 'logIter' iterations
+      str =
+        printf
+          "Blocking probability events %d-%d: %.4f, cumulative %.4f"
+          (i - li)
+          i
+          logIterBpNew
+          cumuNew
+  nCurrArrivalsNew .= 0
+  nCurrRejectedNew .= 0
+  -- Prepend cumulative blocking probability during this logiter
+  -- to a list of previous such b.p.s.
+  cumuBlockProbsNew %= (:) cumuNew
+  cumuBlockProbsHoff %= (:) cumuHoff
+  cumuBlockProbsTot %= (:) cumuTot
+  return str
 
-statsReportEnd :: UTCTime -> Int -> Int -> Stats -> String
-statsReportEnd time nCallsInProgress i stats = str
+statsReportEnd :: Int -> Int -> Stats -> String
+statsReportEnd nCallsInProgress i stats = str
   where
-    dt = diffUTCTime time $ startTime stats :: NominalDiffTime
-    rate = fromRational $ fromIntegral i / toRational dt :: Double
-    (cumNew, cumHoff, cumTot) = statsCums stats
-    durStr =
-      printf
-        "Simulation duration: %s. Processed %d events at %.0f events/second.\n\
-        \Blocking probability %.4f for new calls"
-        (show dt)
-        i
-        rate
-        cumNew
+    (cumuNew, cumuHoff, cumuTot) = statsCums stats
+    durStr = printf "Blocking probability %.4f for new calls" cumuNew
     bpStr =
-      if nRejectedHoff stats > 0
-        then printf ", %.4f for hand-offs, %.4f total." cumHoff cumTot
+      if view nRejectedHoff stats > 0
+        then printf ", %.4f for hand-offs, %.4f total." cumuHoff cumuTot
         else "."
     delta =
-      nArrivalsNew stats + nArrivalsHoff stats - nRejectedNew stats -
-      nRejectedHoff stats -
-      nEnded stats
+      view nArrivalsNew stats + view nArrivalsHoff stats -
+      view nRejectedNew stats -
+      view nRejectedHoff stats -
+      view nEnded stats
     deltaStr =
       if delta /= 0
         then printf " Some calls were lost. Delta: %d" delta

@@ -1,26 +1,15 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Agent where
 
 import Base
-import Control.Lens (view)
-import Control.Monad.Reader (Reader, asks)
-import Control.Monad.State (StateT, get, put)
+-- import Control.Lens (view)
+import Control.Lens
+import Control.Monad.Reader (MonadReader, asks)
+import Control.Monad.State (MonadState, get, put)
 import Data.Array.Accelerate
-import Data.Array.Accelerate.LLVM.Native (run)
-import Gridfuncs (argpmax, eligibleChs, inuseChs, mkFreps, runExp, vvMul)
+import Gridfuncs (argpmax, eligibleChs, inuseChs, mkFreps, runExp, vvMul, featureRep, afterstates)
 import Opt
 import qualified Prelude as P
-import Simulator
-
-data Agent = Agent
-  { avgReward :: Exp Float
-  , wNet :: Acc (Array DIM1 Float)
-  , wGradCorr :: Acc (Array DIM1 Float)
-  }
-
-mkAgent :: Agent
-mkAgent = Agent 0.0 mk mk
-  where
-    mk = fill (constant (Z :. rOWS * cOLS * (cHANNELS + 1))) 0.0
 
 _forward :: Acc (Array DIM1 Float) -> Agent -> Exp Float
 _forward frep agent = the $ vvMul frep (wNet agent)
@@ -29,7 +18,7 @@ forward :: Frep -> Agent -> Exp Float
 forward frep = _forward (prepFrep frep)
 
 -- | Returns the Temporal Difference error, or Nothing if the TD-error is NaN.
-backward :: Frep -> Float -> Frep -> StateT Agent (Reader Opt) (P.Maybe Float)
+backward :: (MonadReader Opt m, MonadState Agent m) => Frep -> Exp Float -> Frep -> m (P.Maybe Float)
 backward frep reward nextFrep = do
   ag <- get
   let avgR = avgReward ag
@@ -66,38 +55,3 @@ backward frep reward nextFrep = do
 prepFrep :: Acc (Array DIM3 Int) -> Acc (Array DIM1 Float)
 prepFrep frep = map fromIntegral $ flatten frep
 
-getAction :: SimState -> (P.Maybe Ch, Frep)
-getAction sstate = (mbch, frep)
-  where
-    ev = view ssEvent sstate
-    grid = view ssGrid sstate
-    cell = view evCell ev
-    chs =
-      if view evType ev P.== END
-        then inuseChs cell grid
-        else eligibleChs cell grid
-    (mbch, frep) =
-      if runExp (null chs)
-        then (P.Nothing, view ssFrep sstate)
-        else let (qvals, freps) = getQvals sstate chs
-                 (idxSh, _) = argpmax qvals
-                 idx = runExp $ unindex1 idxSh
-                 ch = runExp $ chs ! idxSh
-              in ( P.Just ch
-                 , slice freps (constant (Z :. idx :. All :. All :. All)))
-
--- | Get the Q-values for the given actions. Also returns the corresponding freps since.
--- | TODO implement HLA
-getQvals :: SimState -> Chs -> (Acc (Array DIM1 Float), Freps)
-getQvals sstate chs = undefined
-    -- P.foldl fn (zqvals, zfreps) (indexed chs)
-    -- P.map ((map snd) . fst) $
-    -- fn :: (Acc (Array DIM1 Float), Freps) -> (Exp DIM1, Exp Ch) -> (Acc (Array DIM1 Float), Freps)
-    -- fn (qvals, freps) = undefined
-  where
-    l = length chs
-    zfreps = mkFreps l
-    zqvals = fill (index1 l) 0 :: Acc (Array DIM1 Float)
-    -- freps = permute const zfreps idxTrans chs
-    -- idxTrans :: Exp DIM1 -> Exp DIM4
-    -- idxTrans sh =

@@ -92,6 +92,17 @@ afterstates grid (r, c) etype chs = permute const grids idxmap vals
     idxmap :: Exp DIM1 -> Exp DIM4
     idxmap nsh = index4 (unindex1 nsh) (lift r) (lift c) (lift $ chs ! nsh)
 
+-- afterstates' :: Grid -> Cell -> EType -> Chs -> [Grid]
+-- afterstates' grid (r, c) etype chs = permute const grids idxmap vals
+--   where
+--     vals =
+--       fill (index1 $ length chs) (lift (etype P./= END)) :: Acc (Array DIM1 Bool)
+--     grids = replicate (lift (Z :. length chs :. All :. All :. All)) grid
+--     idxmap :: Exp DIM1 -> Exp DIM4
+--     idxmap nsh = index4 (unindex1 nsh) (lift r) (lift c) (lift $ chs ! nsh)
+-- -- featureReps :: Grid -> Cell -> EType -> Chs -> Grids
+-- -- featureReps grid (r, c) etype chs = permute const grids idxmap vals
+
 -- | A feature representation (frep for short) of the grid. The frep is of the
 -- | same spatial dimension as the grid but 1 longer in depth.
 -- | For a given cell, the first 'cHANNELS' features
