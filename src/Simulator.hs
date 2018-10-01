@@ -69,7 +69,8 @@ data SimState = SimState
   , _ssIter :: Int -- Number of executed iterations
   }
 
-makeLenses ''SimState
+-- makeLenses ''SimState
+makeClassy ''SimState
 
 mkSimState :: Word64 -> Reader Opt SimState
 mkSimState seed = do
@@ -155,6 +156,7 @@ environmentStep act = do
   case eType of
     NEW -> do
       statePartM ssStats statsEventArrivalNew
+      -- statsEventArrivalNew
       case act of
         Just _ -> statePartM ssStats statsEventAcceptNew
         Nothing -> statePartM ssStats statsEventRejectNew
@@ -204,7 +206,7 @@ runLogIter = do
   i <- use ssIter
   statePartM ssStats (statsReportLogIter i)
 
-runLogIterWrapper :: Opt -> SimState -> Int -> IO SimState 
+runLogIterWrapper :: Opt -> SimState -> Int -> IO SimState
 runLogIterWrapper opts currentState _ = do
   let (liRes, newState) = runReader (runStateT runLogIter currentState) opts
   putStrLn liRes

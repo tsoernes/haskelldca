@@ -1,3 +1,6 @@
+-- See 'test/UtilsSpec' for examples of how these zooming operators (statePart/statePartM/modifyPart)
+-- can be used
+
 {-# LANGUAGE Rank2Types #-}
 
 module Utils where
@@ -30,6 +33,7 @@ import qualified Data.Map.Strict as Map
 -- and return the result.
 statePart :: (MonadState s m) => ALens' s t -> (t -> (a, t)) -> m a
 statePart lenss act = do
+  -- Pull out part of state
   t <- gets (^# lenss)
   let (a, t') = act t
   modify' (lenss #~ t')
