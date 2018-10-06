@@ -1,6 +1,12 @@
+build:
+  library-profiling: true
+  executable-profiling: true
+
 flags: 
         accelerate-blas:
                 llvm-ptx: false
+        accelerate:
+                debug: true
 packages:
 - .
 extra-deps:

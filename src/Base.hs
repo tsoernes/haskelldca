@@ -3,7 +3,11 @@
 module Base where
 
 import Control.Lens (makeLenses)
-import Data.Array.Accelerate (Acc, Array, DIM1, DIM3, DIM4, Exp, fill, constant, Z(..), (:.)(..))
+import Data.Array.Accelerate (Elt, Scalar, Exp, Acc, Vector, Matrix, Array, Slice, Shape, DIM0, DIM1, DIM2, DIM3, DIM4, Z(..), (:.)(..), constant, index1, index2, index3, unindex1, unindex2, unindex3, (:.)(..), All(..), Z(..), arrayShape, arraySize, Exp, slice, boolToInt, the, fill, unit, unlift)
+import qualified Data.Array.Accelerate as A
+-- import Data.Array.Accelerate (Elt, indexArray, unit, Acc, Array, DIM1, DIM3, DIM4, Exp, fill, constant, Z(..), (:.)(..))
+import Prelude as P
+import Control.Arrow ((***))
 
 rOWS = 7 :: Int
 
@@ -11,7 +15,11 @@ cOLS = 7 :: Int
 
 cHANNELS = 70 :: Int
 
+gridIdxs :: [Cell]
 gridIdxs = concat [[(r, c) | c <- [0 .. cOLS - 1]] | r <- [0 .. rOWS - 1]]
+
+gridIdxsExp :: [(Exp Int, Exp Int)]
+gridIdxsExp = P.map (A.lift *** A.lift) gridIdxs
 
 type GridCell = Acc (Array DIM1 Bool)
 
@@ -31,9 +39,25 @@ type Cell = (Int, Int)
 
 data EType
   = NEW
-  | END
+  | END Ch (Maybe Cell )
+  -- ^ Ch: The channel currently in use to be terminated
+  -- Cell: The cell to which the call will be handed off (for HOFF events only)
   | HOFF
   deriving (Show, Eq, Ord)
+
+isEnd :: EType -> Bool
+isEnd NEW = False
+isEnd (END _ _) = True
+isEnd HOFF = False
+
+isHoff :: EType -> Bool
+isHoff NEW = False
+isHoff (END _ _) = False
+isHoff HOFF = True
+
+hoffCell :: EType -> Maybe Cell
+hoffCell (END _ mbc) = mbc
+hoffCell _ = Nothing
 
 type EventId = Int
 
@@ -41,9 +65,7 @@ data Event = Event
   { _evTime :: Double -- Time when event takes place
   , _evType :: EType
   , _evCell :: Cell
-  , _evEndCh :: Maybe Ch -- The channel currently in use to be terminated (for END events only)
-  , _evHoffCell :: Maybe Cell -- The cell to which the call will be handed off (for HOFF events only)
-  } deriving (Eq)
+  } deriving (Eq, Show)
 
 makeLenses ''Event
 
@@ -60,13 +82,15 @@ instance Ord EventKey where
       x -> x
 
 data Agent = Agent
-  { avgReward :: Exp Float
-  , wNet :: Acc (Array DIM1 Float)
-  , wGradCorr :: Acc (Array DIM1 Float)
+  { _avgReward :: Exp Float
+  , _wNet :: Acc (Array DIM1 Float)
+  , _wGradCorr :: Acc (Array DIM1 Float)
   }
+makeLenses ''Agent
 
 mkAgent :: Agent
 mkAgent = Agent 0.0 mk mk
   where
     mk = fill (constant (Z :. rOWS * cOLS * (cHANNELS + 1))) 0.0
 
+data Backend = Interpreter | CPU deriving Show

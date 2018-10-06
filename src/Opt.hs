@@ -1,7 +1,13 @@
+{-# LANGUAGE Rank2Types #-}
+
 module Opt where
 
 import Data.Semigroup ((<>))
 import Options.Applicative
+import Base
+
+import qualified Data.Array.Accelerate as A
+
 
 data Opt = Opt
   { callDurNew :: Double
@@ -14,7 +20,8 @@ data Opt = Opt
   , alphaAvg :: Float
   , alphaGrad :: Float
   , verifyReuseConstraint :: Bool
-  } deriving (Show)
+  , backend :: Backend
+} deriving (Show)
 
 getOpts :: Parser Opt
 getOpts =
@@ -56,4 +63,6 @@ getOpts =
     (long "learning_rate_grad" <> metavar "alpha_grad" <> showDefault <>
      value 5e-6 <>
      help "") <*>
-  switch (long "verify_reuse_constraint")
+  switch (long "verify_reuse_constraint") <*>
+  fmap (\x -> if x then CPU else Interpreter)
+  (switch (long "llvm" <> help "Use the Accelerate LLVM CPU backend instead of the interpreter"))

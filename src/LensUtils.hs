@@ -1,9 +1,9 @@
--- See 'test/UtilsSpec' for examples of how these zooming operators (statePart/statePartM/modifyPart)
+-- See 'test/LensUtilsSpec' for examples of how these zooming operators (statePart/statePartM/modifyPart)
 -- can be used
 
 {-# LANGUAGE Rank2Types #-}
 
-module Utils where
+module LensUtils where
 
 import Control.Arrow ((&&&))
 import Control.Lens
