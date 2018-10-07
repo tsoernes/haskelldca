@@ -1,6 +1,16 @@
+build:
+  library-profiling: true
+  executable-profiling: true
+  haddock: true
+  open-haddocks: false
+  haddock-deps: false
+  haddock-internal: false
+
 flags: 
         accelerate-blas:
                 llvm-ptx: false
+        accelerate:
+                debug: true
 packages:
 - .
 extra-deps:

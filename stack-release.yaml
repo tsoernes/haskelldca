@@ -1,0 +1,26 @@
+ghc-options:
+  "$locals": -O2
+  "$targets": -O2 -with-rtsopts=-n2M -with-rtsopts=-A64M
+  accelerate: -O2 -with-rtsopts=-n2M -with-rtsopts=-A64M
+  accelerate-llvm-native: -O2 -with-rtsopts=-n2M -with-rtsopts=-A64M
+work-dir: .stack-work-release
+build:
+  library-profiling: false
+  executable-profiling: false
+
+flags: 
+        accelerate-blas:
+                llvm-ptx: false
+        accelerate:
+                debug: false
+packages:
+- .
+extra-deps:
+- accelerate-1.2.0.0
+- accelerate-llvm-1.2.0.0
+- accelerate-llvm-native-1.2.0.0
+- accelerate-blas-0.2.0.0
+- llvm-hs-6.0.0
+- llvm-hs-pure-6.0.0
+- mersenne-random-1.0.0.1
+resolver: lts-12.10
