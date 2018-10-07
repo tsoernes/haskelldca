@@ -117,18 +117,18 @@ statsReportEnd :: Int -> Int -> Stats -> String
 statsReportEnd nCallsInProgress i stats = str
   where
     (cumuNew, cumuHoff, cumuTot) = statsCums stats
-    durStr = printf "Blocking probability %.4f for new calls" cumuNew
+    durStr = printf "Finished %d events. Blocking probability %.4f for new calls" i cumuNew
     bpStr =
       if view nRejectedHoff stats > 0
         then printf ", %.4f for hand-offs, %.4f total." cumuHoff cumuTot
         else "."
-    delta =
+    reported =
       view nArrivalsNew stats + view nArrivalsHoff stats -
       view nRejectedNew stats -
       view nRejectedHoff stats -
       view nEnded stats
-    deltaStr =
-      if delta /= 0
-        then printf " Some calls were lost. Delta: %d" delta
+    reportedStr =
+      if reported /= nCallsInProgress
+        then printf " Some calls were lost. According to reported calls there should be %d calls currently in progress at simulation end but there are %d" reported nCallsInProgress 
         else ""
-    str = durStr ++ bpStr ++ deltaStr
+    str = durStr ++ bpStr ++ reportedStr
