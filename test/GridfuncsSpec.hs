@@ -59,15 +59,6 @@ spec = do
         frep = run bend $ featureRep grid'
     it "can run bend w/o crashing" $ frep `shouldBe` frep
 
-  describe "afterStateFreps" $ do
-    let ch = 0
-        setIdx _ = constant (Z :. 3 :. 3 :. ch) :: Exp DIM3
-        grid' = permute const grid setIdx (unit $ lift True)
-        cell = (3, 3)
-        chs = eligibleChs cell grid'
-        afreps = run bend $ afterStateFreps grid' cell NEW chs
-    it "can run bend w/o crashing due to nested data parallelism" $ afreps `shouldBe` afreps
-
   describe "incAfterStateFreps " $ do
     let ch = 0
         setIdx _ = constant (Z :. 3 :. 3 :. ch) :: Exp DIM3

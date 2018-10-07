@@ -6,9 +6,9 @@ homepage:            https://github.com/tsoernes/haskell-dca#readme
 license:             MIT
 license-file:        LICENSE
 author:              Torstein Sørnes
-maintainer:          example@example.com
+maintainer:          t.soernes@gmail.com
 copyright:           2018 Torstein Sørnes
-category:            Web
+category:            Machine Learning
 build-type:          Simple
 cabal-version:       >=1.10
 extra-source-files:  README.md
@@ -24,6 +24,7 @@ executable dca-exe
     , Opt
     , Stats
     , EventGen
+    , EventGen.Internal
     , Simulator
     , LensUtils
     , AccUtils
@@ -78,6 +79,7 @@ test-suite dca-test
     , LensUtils 
     , LensUtilsSpec
     , AccUtils
+    , EventGen.Internal
     , EventGen
     , EventGenSpec
     , Stats

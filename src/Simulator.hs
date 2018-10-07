@@ -19,7 +19,7 @@ import Control.Monad.State
 import Data.Array.Accelerate (Exp, Acc, Array, DIM0, DIM1, DIM2, DIM3, DIM4, Z(..), (:.)(..), constant, unindex1, index2, index3, (:.)(..), All(..), Any(..), Z(..), arrayShape, arraySize, Exp, slice)
 import qualified Data.Array.Accelerate as A
 import qualified Data.Array.Accelerate.Data.Maybe as M
-import AccUtils (boolSum2, runExp, argpmax1, argpmax, unplain)
+import AccUtils (boolSum, runExp, argpmax1, argpmax)
 import Data.Maybe (isNothing)
 import Data.RVar (sampleRVar)
 import Data.Random (stdUniform)
@@ -29,7 +29,7 @@ import Data.Time.Clock (NominalDiffTime, UTCTime, diffUTCTime, getCurrentTime)
 import Data.Word (Word64)
 import EventGen
   ( EventGen
-  , gen
+  , egGen
   , generateEndEvent
   , generateHoffEndEvent
   , generateHoffNewEvent
@@ -64,8 +64,8 @@ data SimState = SimState
   , _ssIter :: Int -- Number of executed iterations
   }
 
--- makeLenses ''SimState
-makeClassy ''SimState
+makeLenses ''SimState
+-- makeClassy ''SimState
 
 mkSimState :: Word64 -> Reader Opt SimState
 mkSimState seed = do
@@ -91,10 +91,8 @@ getAction sstate = (mbch, frep)
 
     -- Hopefully this is lazy so that 'selectAction' is not called if 'chs' is empty
     (_idxSh, _qval, _frep) = selectAction sstate chs
-    ch = chs A.! _idxSh :: Exp Int
-    --  :: Exp (A.Plain (Maybe Int))
     noCh = constant M.Nothing :: Exp (Maybe Ch)
-    someCh = A.lift (M.Just ch) :: Exp (Maybe Ch)
+    someCh = A.lift (M.Just $ chs A.! _idxSh) :: Exp (Maybe Ch)
     mbch = A.cond (A.null chs) noCh someCh
     frep = A.acond (A.null chs) (sstate ^. ssFrep) _frep
 
@@ -146,7 +144,7 @@ environmentStep act = do
       forM_ act (\ch -> do
            -- With probability ph, hand off the call to a
            -- nearby cell instead of terminating
-           p <- statePartM (ssEventgen . gen) (sampleRVar stdUniform)
+           p <- statePartM (ssEventgen . egGen) (sampleRVar stdUniform)
            ph <- asks hoffProb
            if p < ph
              then statePartM ssEventgen (generateHoffNewEvent time cell ch)
@@ -156,7 +154,7 @@ environmentStep act = do
   -- Execute action, if any, on the grid and return call count as reward
   forM_ act (modifyPart ssGrid . executeAction ev)
   ssIter += 1
-  boolSum2 <$> use ssGrid
+  boolSum <$> use ssGrid
 
 -- | The inner loop which executes a single step in the simulator. First,
 -- | the agent selects an action which is executed on the network grid. In
@@ -208,7 +206,7 @@ runSim seed opts = do
   -- Print the final 'statistics' report
   let stats = view ssStats sState' :: Stats
       bend = backend opts
-      nCallsInProgress = runExp bend $ boolSum2 (view ssGrid sState')
+      nCallsInProgress = runExp bend $ boolSum (view ssGrid sState')
       i = view ssIter sState'
   putStrLn $ statsReportEnd nCallsInProgress i stats
   -- .. and runtime + speed
