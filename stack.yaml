@@ -1,3 +1,6 @@
+ghc-options:
+  "$targets": -Wall -threaded -rtsopts -with-rtsopts=-xc -with-rtsopts=-N
+
 build:
   library-profiling: true
   executable-profiling: true

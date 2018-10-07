@@ -1,9 +1,12 @@
 ghc-options:
-  "$locals": -O2
-  "$targets": -O2 -with-rtsopts=-n2M -with-rtsopts=-A64M
-  accelerate: -O2 -with-rtsopts=-n2M -with-rtsopts=-A64M
-  accelerate-llvm-native: -O2 -with-rtsopts=-n2M -with-rtsopts=-A64M
+  "$locals": -O2 -threaded -rtsopts -with-rtsopts=-N -with-rtsopts=-n2M -with-rtsopts=-A64M 
+  "$targets": -O2 -threaded -rtsopts -with-rtsopts=-N -with-rtsopts=-n2M -with-rtsopts=-A64M 
+  accelerate: -O2 -threaded -rtsopts -with-rtsopts=-N -with-rtsopts=-n2M -with-rtsopts=-A64M 
+  accelerate-llvm-native: -O2 -threaded -rtsopts -with-rtsopts=-N -with-rtsopts=-n2M -with-rtsopts=-A64M 
+rebuild-ghc-options: true
+
 work-dir: .stack-work-release
+
 build:
   library-profiling: false
   executable-profiling: false
