@@ -75,9 +75,13 @@ spec = do
       ev `shouldBe` ev
 
     it "Should be exactly RxC events in a fresh generator " $ do
-      -- runState :: State EventGen Event -> EventGen -> (Event, EventGen)
+      -- Pop RxC events
       let (evs, eg') = runState (mapM (const pop) gridIdxs) eg
-      evaluate (runState pop eg') `shouldThrow` anyErrorCall
+      evs `shouldBe` evs
+      _egId eg' `shouldBe` _egId eg'
+      -- Pop one more
+      let (evs', eg'') = runState pop eg'
+      evaluate (eg'') `shouldThrow` anyErrorCall
 
   describe "Reassigning in EventGen" $ do
     let eg = mke seed
