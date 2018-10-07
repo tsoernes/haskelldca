@@ -2,6 +2,7 @@
 
 module Opt where
 
+import Data.Char (toLower)
 import Data.Semigroup ((<>))
 import Options.Applicative
 import Base
@@ -64,5 +65,11 @@ getOpts =
      value 5e-6 <>
      help "") <*>
   switch (long "verify_reuse_constraint") <*>
-  fmap (\x -> if x then CPU else Interpreter)
-  (switch (long "llvm" <> help "Use the Accelerate LLVM CPU backend instead of the interpreter"))
+  option bendOpt (long "backend" <> value Interpreter <> showDefault <> help bendOptStr)
+
+bendOptStr = "Accepted backends are 'interp' for 'Interpreter' and 'cpu' for 'LLVM.Native'."
+bendOpt :: ReadM Backend
+bendOpt = str >>= \s -> case map toLower s of
+    "interp" -> return Interpreter
+    "cpu" -> return CPU
+    _ -> readerError bendOptStr
