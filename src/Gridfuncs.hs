@@ -3,13 +3,13 @@
 
 module Gridfuncs where
 
-import Base
-import Control.Arrow ((&&&), (***), first)
-import Data.Array.Accelerate
-import AccUtils
-import Gridneighs
+import           AccUtils ( boolSum, index4 )
+import           Base
+import           Control.Arrow ( Arrow((***)) )
+import           Data.Array.Accelerate
+import           Gridneighs ( getNeighborhoodAcc, getNeighborhoodOffsets, getNeighs, _neighs )
 import qualified Prelude as P
-import Debug.Trace (trace)
+
 
 mkGrid :: Grid
 mkGrid = fill (constant (Z :. rOWS :. cOLS :. cHANNELS)) (lift False)
@@ -145,45 +145,48 @@ incAfterStateFreps grid frep cell@(r, c) etype chs = nInuse ++ nElig
     -- The value of a feature will change by (+1) or (-1) depending on the event and
     -- feature type, if it changes at all.
     diff = if isEnd etype then -1 else 1
-    grid' = if isEnd etype then permute const grid fillCell (fill (shape chs) (lift False)) else grid
+    zgrid = permute const grid fillCell (fill (shape chs) (lift False))
+    grid' = if isEnd etype then zgrid else grid
     fillCell sh = lift (Z :. r :. c :. unindex1 sh)
 
     afreps = replicate (lift (Z :. length chs :. All :. All :. All)) frep :: Freps
     neighs2 = getNeighborhoodAcc 2 ((lift *** lift) cell) True
     neighs4 = getNeighborhoodAcc 4 ((lift *** lift) cell) False
 
+    -- Compute the inuse features
     nIinit = init afreps
     nInuse = permute (+) nIinit icomb $ fill (index2 (length chs) (length neighs4)) diff
     icomb :: Exp DIM2 -> Exp DIM4
-    icomb sh = lift (Z :. i :. r' :. c' :. ch)
+    icomb sh = lift (Z :. ch_i :. r' :. c' :. ch)
       where
-        (i, j) = unlift $ unindex2 sh :: (Exp Int, Exp Int)
-        ch = chs ! index1 i
-        (r', c') = unlift $ neighs4 ! index1 j :: (Exp Int, Exp Int)
+        (ch_i, neigh_i) = unlift $ unindex2 sh :: (Exp Int, Exp Int)
+        ch = chs ! index1 ch_i
+        (r', c') = unlift $ neighs4 ! index1 neigh_i :: (Exp Int, Exp Int)
 
+    -- Compute the eligibility feature
     nEinit = drop (lift cHANNELS) afreps
     nElig = permute (+) nEinit idxComb eligDiff'
     -- There is 1 entry in 'eligDiff' for each frep in 'afreps';
     -- or equivalently, for each ch in 'chs'.
     idxComb :: Exp DIM2 -> Exp DIM4
-    idxComb sh = lift (Z :. i :. r' :. c' :. (0 :: Int))
+    idxComb sh = lift (Z :. ch_i :. r' :. c' :. (0 :: Int))
       where
-        (i, j) = unlift $ unindex2 sh :: (Exp Int, Exp Int)
-        (r', c') = unlift $ neighs2 ! index1 j  :: (Exp Int, Exp Int)
+        (ch_i, neigh_i) = unlift $ unindex2 sh :: (Exp Int, Exp Int)
+        (r', c') = unlift $ neighs2 ! index1 neigh_i  :: (Exp Int, Exp Int)
 
+    -- Compute the change in eligibility feature
     eligDiff = replicate (lift (Z :. All :. length neighs2)) chs
     eligDiff' = imap mapCh eligDiff
     mapCh :: Exp DIM2 -> Exp Int -> Exp Int
     mapCh sh ch = (-1) * diff * (boolToInt . not $ notElig)
       where
-        (i, j) = unlift $ unindex2 sh :: (Exp Int, Exp Int) -- (ch_idx, neigh2_idx)
-        (r', c') = unlift $ neighs2 ! index1 j  :: (Exp Int, Exp Int)
+        (_, neigh_i) = unlift $ unindex2 sh :: (Exp Int, Exp Int) -- (ch_idx, neigh2_idx)
+        (r', c') = unlift $ neighs2 ! index1 neigh_i  :: (Exp Int, Exp Int)
         (start, n) = getNeighborhoodOffsets 2 (r', c') True :: (Exp Int, Exp Int)
-        -- `notElig` is True if the channel is not eligible.
-        notElig = fst $ iterate n fn (lift (False, start))
-        fn :: Exp (Bool, Int) -> Exp (Bool, Int)
-        fn acc = lift (acc_diff || neighBit, acc_idx + 1)
+        notElig = fst $ iterate n orNeigh (lift (False, start))
+        orNeigh :: Exp (Bool, Int) -> Exp (Bool, Int)
+        orNeigh acc = lift (acc_diff || neighBit, acc_idx + 1)
           where
             (acc_diff, acc_idx) = unlift acc :: (Exp Bool, Exp Int)
-            (r'', c'') = unlift $ neighs ! index1 acc_idx
+            (r'', c'') = unlift $ _neighs ! index1 acc_idx
             neighBit = grid' ! index3 r'' c'' ch

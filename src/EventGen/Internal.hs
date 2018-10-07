@@ -83,6 +83,9 @@ pop
     _ -> return ()
   return event
 
+_generateEndEvent ::
+  (MonadRandom m, MonadState EventGen m) =>
+  Double -> Cell -> Ch -> Double -> m ()
 _generateEndEvent time cell ch lam = do
   dt <- sampleRVar (exponential (lam :: Double))
   _ <- push $ Event (time + dt) (END ch Nothing) cell

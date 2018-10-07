@@ -7,7 +7,7 @@ import Data.Semigroup ((<>))
 import Options.Applicative
 import Base
 
-import qualified Data.Array.Accelerate as A
+
 
 
 data Opt = Opt
@@ -67,7 +67,9 @@ getOpts =
   switch (long "verify_reuse_constraint") <*>
   option bendOpt (long "backend" <> value Interpreter <> showDefault <> help bendOptStr)
 
+bendOptStr :: String
 bendOptStr = "Accepted backends are 'interp' for 'Interpreter' and 'cpu' for 'LLVM.Native'."
+
 bendOpt :: ReadM Backend
 bendOpt = str >>= \s -> case map toLower s of
     "interp" -> return Interpreter

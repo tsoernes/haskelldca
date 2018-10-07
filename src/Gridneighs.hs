@@ -1,17 +1,20 @@
 module Gridneighs where
 
-import Base
-import Data.Array.Accelerate (Exp, Acc, Array, DIM0, DIM1, DIM2, DIM3, Z(..), (:.)(..), constant, index3)
+import Base ( cOLS, gridIdxs, rOWS, Cell )
+import Data.Array.Accelerate
+    ( Exp, Acc, Array, DIM1, DIM3, index3, (:.)((:.)), Z(Z) )
 import qualified Data.Array.Accelerate as A
-import Debug.Trace (trace)
+    ( fromList, (!), use, slit, Lift(lift) )
 
 -- (V  , M)
-(neighs, nNeighs) = generateNeighsAcc
+_neighs :: Acc (Array DIM1 Cell)
+_nNeighs :: Acc (Array DIM3 Int)
+(_neighs, _nNeighs) = generateNeighsAcc
 
 -- Return a vector of indices of cells at distance 'd' or less from the given cell.
 -- The boolean parameter determines if the given cell itself is included in the list.
 getNeighborhoodAcc :: Int -> (Exp Int, Exp Int) -> Bool -> Acc (Array DIM1 Cell)
-getNeighborhoodAcc d cell includeself = A.slit start n neighs
+getNeighborhoodAcc d cell includeself = A.slit start n _neighs
   where
     (start, n) = getNeighborhoodOffsets d cell includeself
 
@@ -19,9 +22,9 @@ getNeighborhoodAcc d cell includeself = A.slit start n neighs
 getNeighborhoodOffsets :: Int -> (Exp Int, Exp Int) -> Bool -> (Exp Int, Exp Int)
 getNeighborhoodOffsets d (r,c) includeself = (start', n')
   where
-    start = nNeighs A.! index3 r c 0
+    start = _nNeighs A.! index3 r c 0
     start' = if includeself then start else start + 1
-    n = nNeighs A.! index3 r c (A.lift d)
+    n = _nNeighs A.! index3 r c (A.lift d)
     n' = if includeself then n else n - 1
 
 -- Returns a vector V of cells and a matrix M of integers.
@@ -72,18 +75,19 @@ neighborhood (r, c) = (neighs, nNeighs)
 
 -- Return the set of d-distance neighbors for the given cell
 periphery :: Int -> Cell -> [Cell]
-periphery d (r, c) =
+periphery d (rFoc, cFoc) =
   -- The set of d-distance neighbors form a hexagon shape. Traverse each of
   -- the sides of this hexagon and gather up the cell indices.
-  let ps1 = take d . iterate (\(r, c) -> (r, c + 1)) $ (r - d, c)
-      ps2 = take d . iterate (\(r, c) -> (r + 1, c)) $ (r - d, c + d)
-      ps3 = take d . iterate (\(r, c) -> (r + 1, c - 1)) $ (r, c + d)
-      ps4 = take d . iterate (\(r, c) -> (r, c - 1)) $ (r + d, c)
-      ps5 = take d . iterate (\(r, c) -> (r - 1, c)) $ (r + d, c - d)
-      ps6 = take d . iterate (\(r, c) -> (r - 1, c + 1)) $ (r, c - d)
+  let ps1 = take d . iterate (\(r, c) -> (r, c + 1)) $ (rFoc - d, cFoc)
+      ps2 = take d . iterate (\(r, c) -> (r + 1, c)) $ (rFoc - d, cFoc + d)
+      ps3 = take d . iterate (\(r, c) -> (r + 1, c - 1)) $ (rFoc, cFoc + d)
+      ps4 = take d . iterate (\(r, c) -> (r, c - 1)) $ (rFoc + d, cFoc)
+      ps5 = take d . iterate (\(r, c) -> (r - 1, c)) $ (rFoc + d, cFoc - d)
+      ps6 = take d . iterate (\(r, c) -> (r - 1, c + 1)) $ (rFoc, cFoc - d)
    in filter isValid (ps6 ++ ps5 ++ ps4 ++ ps3 ++ ps2 ++ ps1)
 
 -- Return the set of d-distance neighbors for the given cell
+periphery' :: Int -> Cell -> [Cell]
 periphery' d (r, c)
   -- The set of d-distance neighbors form a hexagon shape. Traverse each of
   -- the sides of this hexagon and gather up the cell indices.

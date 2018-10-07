@@ -25,6 +25,7 @@ executable dca-exe
     , Stats
     , EventGen
     , EventGen.Internal
+    , SimRunner
     , Simulator
     , LensUtils
     , AccUtils

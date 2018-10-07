@@ -19,21 +19,17 @@ module EventGen
 
 import EventGen.Internal
 import Base
-import Control.Lens ( (^.), use, uses, view, (+=), set, makeLenses )
+import Control.Lens ( view, set )
 import Control.Monad.Reader ( MonadReader, asks )
 import Control.Monad.State.Lazy ( MonadState(state), StateT, execStateT, modify' )
-import qualified Data.Heap as Heap ( MinHeap, empty, insert, null, view )
-import qualified Data.Map.Strict as Map ( Map, (!), (!?), adjust, delete, empty, insert, null )
-import Data.Maybe ( fromJust )
-import Data.RVar ( getRandomDouble, getRandomWord64, sampleRVar )
+import qualified Data.Map.Strict as Map ( adjust, insert )
+import Data.RVar ( sampleRVar )
 import Data.Random ( MonadRandom, uniform )
 import Data.Random.Distribution.Exponential ( exponential )
-import Data.Random.Source ( monadRandom )
-import Data.Word (Word64)
+import Data.Word ( Word64 )
 import Gridneighs ( getNeighs )
-import LensUtils ( modifyPart, statePart, statePartM )
+import LensUtils ( modifyPart, statePartM )
 import Opt ( Opt(callDurHoff, callDurNew, callRate) )
-import System.Random.Mersenne.Pure64 ( PureMT, pureMT, randomDouble, randomWord64 )
 
 
 -- | Given a random seed, create an EventGen with initial events:

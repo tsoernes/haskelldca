@@ -5,29 +5,9 @@
 
 module LensUtils where
 
-import Control.Arrow ((&&&))
-import Control.Lens
-  ( ALens'
-  , Lens'
-  , ( #%~ )
-  , ( #~ )
-  , (^#)
-  , lens
-  , makeLenses
-  , over
-  , set
-  , use
-  , view
-  )
-import Control.Monad.State.Lazy
-  ( MonadState(state)
-  , StateT
-  , gets
-  , modify'
-  , runStateT
-  )
-import qualified Data.Heap as Heap
-import qualified Data.Map.Strict as Map
+import Control.Arrow ( (&&&) )
+import Control.Lens ( Lens', view, (#%~), (#~), (^#), lens, set, ALens' )
+import Control.Monad.State.Lazy ( StateT(runStateT), MonadState, gets, modify' )
 
 -- | Using a lens, zoom in on a part of the state, apply the state function
 -- and return the result.
@@ -50,7 +30,7 @@ statePartM lenss act = do
 
 -- | Using a lens, zoom in on a part of the state, apply the state transformer
 modifyPart :: (MonadState s m) => ALens' s t -> (t -> t) -> m ()
-modifyPart lenss mod = modify' (lenss #%~ mod)
+modifyPart lenss trans = modify' (lenss #%~ trans)
 
 pairLens2 :: Lens' s x -> Lens' s y -> Lens' s (x, y)
 pairLens2 l1 l2 =
