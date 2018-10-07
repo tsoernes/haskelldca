@@ -1,9 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
-module UtilsSpec where
+module LensUtilsSpec where
 
 import qualified Data.Set
-import Utils
+import LensUtils
 import Stats
 import Data.Functor.Identity
 import Base

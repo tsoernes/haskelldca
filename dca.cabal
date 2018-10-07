@@ -2,12 +2,12 @@ name:                dca
 version:             0.1.0.0
 -- synopsis:
 -- description:
-homepage:            https://github.com/githubuser/dca#readme
-license:             BSD3
+homepage:            https://github.com/tsoernes/haskell-dca#readme
+license:             MIT
 license-file:        LICENSE
-author:              Author name here
+author:              Torstein Sørnes
 maintainer:          example@example.com
-copyright:           2018 Author name here
+copyright:           2018 Torstein Sørnes
 category:            Web
 build-type:          Simple
 cabal-version:       >=1.10
@@ -25,12 +25,14 @@ executable dca-exe
     , Stats
     , EventGen
     , Simulator
-    , Utils
+    , LensUtils
+    , AccUtils
     , Agent
     , Scratch
   build-depends:       
       base >= 4.7 && < 5
     , hspec
+    , deepseq
     , accelerate
     , accelerate-llvm-native
     , accelerate-blas
@@ -66,18 +68,29 @@ test-suite dca-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs 
   other-modules:
-      Gridneighs
+      Agent
+    , TestBase
+    , AgentSpec
+    , Gridneighs
     , GridneighsSpec
-    , Utils 
-    , UtilsSpec
+    , Gridfuncs
+    , GridfuncsSpec
+    , LensUtils 
+    , LensUtilsSpec
+    , AccUtils
+    , EventGen
+    , EventGenSpec
     , Stats
+    , Simulator
     , Base
+    , Opt
   hs-source-dirs:
       test
       src
   ghc-options: -O -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       base >=4.7 && <5
+    , deepseq
     , hspec
     , accelerate
     , accelerate-llvm-native
