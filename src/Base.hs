@@ -68,18 +68,6 @@ data Event = Event
 
 makeLenses ''Event
 
-data EventKey = EventKey
-  { ekTime :: Double
-  , ekId :: EventId
-  } deriving (Eq, Show)
-
--- | Used to assure that the END event of a hand-off is handled before the HOFF part
-instance Ord EventKey where
-  e1 `compare` e2 =
-    case ekTime e1 `compare` ekTime e2 of
-      EQ -> ekId e1 `compare` ekId e2
-      x -> x
-
 data Agent = Agent
   { _avgReward :: Exp Float
   , _wNet :: Acc (Array DIM1 Float)

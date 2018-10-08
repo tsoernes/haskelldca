@@ -11,7 +11,6 @@ module EventGen
   , generateHoffEndEvent
   , reassign
   , pop
-  , push
   , egId
   , egEvents
   , egGen
@@ -19,18 +18,45 @@ module EventGen
 
 import EventGen.Internal
 import Base
-import Control.Lens ( view, set )
+import Control.Lens ( (^.), uses, view, set )
 import Control.Monad.Reader ( MonadReader, asks )
 import Control.Monad.State.Lazy ( MonadState(state), StateT, execStateT, modify' )
-import qualified Data.Map.Strict as Map ( adjust, insert )
+import qualified Data.Heap as Heap ( view )
+import qualified Data.Map.Strict as Map ( adjust, (!?), delete, insert )
+import Data.Maybe ( fromJust )
 import Data.RVar ( sampleRVar )
 import Data.Random ( MonadRandom, uniform )
 import Data.Random.Distribution.Exponential ( exponential )
 import Data.Word ( Word64 )
 import Gridneighs ( getNeighs )
-import LensUtils ( modifyPart, statePartM )
+import LensUtils ( modifyPart, statePartM, statePart  )
 import Opt ( Opt(callDurHoff, callDurNew, callRate) )
 
+
+-- | Retrieve the highest priority event from the event generator.
+-- | Throws an error if the queue is empty.
+pop :: (MonadState EventGen m) => m Event
+pop = do
+  -- queueIsNull <- uses egQueue null
+  -- Pass queue through trace OP
+  -- let q = trace ("Queue is empty before pop: " ++ show queueIsNull) queue
+  eKey <- statePart egQueue $ fromJust . Heap.view
+  -- ^ Pop an identifier from the heap and retrieve the corresponding event
+  -- from the hashmap. Then delete the it from the hashmaps.
+  let eId = ekId eKey
+  event <- fromJust <$> uses egEvents (Map.!? eId)
+  -- Pass event through trace OP
+  -- let event' =
+  --       fromJust $
+  --       trace
+  --         ("Event in map is nothing (before fromJust): " ++
+  --          show (isNothing event'))
+  --         event
+  modifyPart egEvents $ Map.delete eId
+  case event ^. evType of
+    END ch _ -> modifyPart egEndIds (Map.delete (view evCell event, ch))
+    _ -> return ()
+  return event
 
 -- | Given a random seed, create an EventGen with initial events:
 -- | one event queued for each cell.
@@ -56,7 +82,7 @@ generateNewEvent ::
      (MonadRandom m, MonadReader Opt m, MonadState EventGen m) => Double -> Cell -> m ()
 generateNewEvent time cell = do
   lam <- asks callRate
-  dt <- sampleRVar (exponential (1 / lam :: Double))
+  dt <- sampleRVar (exponential (lam / 60.0))
   _ <- push $ Event (time + dt) NEW cell
   return ()
 
@@ -74,7 +100,7 @@ generateHoffNewEvent ::
   -> m ()
 generateHoffNewEvent time cell ch = do
   lam <- asks callDurNew
-  dt <- sampleRVar (exponential (lam :: Double))
+  dt <- sampleRVar (exponential (1.0 / lam :: Double))
   let neighs = getNeighs 2 cell False
   neigh_i <- sampleRVar $ uniform 0 (length neighs - 1)
   let toCell = neighs !! neigh_i

@@ -5,12 +5,11 @@
 
 module EventGen.Internal where
 
-import           Base ( evCell, evType, Cell, Ch, EType(END), Event(Event), EventId, EventKey(..) )
-import           Control.Lens ( (^.), use, uses, view, (+=), makeLenses )
+import           Base
+import           Control.Lens ( use, (+=), makeLenses )
 import           Control.Monad.State.Lazy ( StateT, MonadState )
-import qualified Data.Heap as Heap ( insert, view, empty, MinHeap )
-import qualified Data.Map.Strict as Map ( Map, (!), (!?), delete, empty, insert )
-import           Data.Maybe ( fromJust )
+import qualified Data.Heap as Heap ( insert, empty, MinHeap )
+import qualified Data.Map.Strict as Map ( Map, (!), delete, empty, insert )
 import           Data.RVar ( getRandomDouble, getRandomWord64, sampleRVar )
 import           Data.Random ( MonadRandom )
 import           Data.Random.Distribution.Exponential ( exponential )
@@ -21,10 +20,31 @@ import           LensUtils ( modifyPart, statePart )
 import           System.Random.Mersenne.Pure64 ( PureMT, pureMT, randomDouble, randomWord64 )
 
 
+data EventKey = EventKey
+  { ekTime :: Double
+  , ekId :: EventId
+  } deriving (Eq, Show)
+
+-- | Used to assure that the END event of a hand-off is handled before the HOFF part
+instance Ord EventKey where
+  e1 `compare` e2 =
+    case ekTime e1 `compare` ekTime e2 of
+      EQ -> ekId e1 `compare` ekId e2
+      x -> x
+
+-- | An Event Generator. It stores events in a min-heap and uses two auxiliary hash maps
+-- | to allow efficient use of the following operations:
+-- | 1: Retrieval of the event with the largest priority
+-- | 2: The priority is the (inverse of) time stamp of the event. In case of call hand-off,
+-- | the termination (END) event in the departure cell has larger priority than the
+-- | service request (HOFF) in the arrival cell.
+-- | 3: Channel reassignment. Is made possible due to efficient retrieval of stored END
+-- | event based only on cell index and channel in use.
 data EventGen = EventGen
-    -- First unused event ID.
-    -- Since it is initialized at 0 it keeps track of how many events have been pushed.
   { _egId :: EventId
+    -- ^ The smallest unused event ID.
+    -- Since it is initialized at 0 (and only grows) it
+    -- keeps track of how many events have been pushed.
   , _egQueue :: Heap.MinHeap EventKey -- Min-heap of event-identifiers sorted on event times
   , _egEvents :: Map.Map EventId Event -- Mapping from event IDs to event structs
   , _egEndIds :: Map.Map (Cell, Ch) EventId -- Mapping from cell-channel pairs to END event IDs
@@ -57,37 +77,12 @@ push event@(Event time etype cell) = do
   egId += 1
   return ()
 
--- | Retrieve the highest priority event from the event generator.
--- | Throws an error if the queue is empty.
-pop :: (MonadState EventGen m) => m Event
-pop
-  -- Pop an identifier from the heap and retrieve the corresponding event
-  -- from the hashmap. Then delete the it from the hashmaps.
- = do
-  queueIsNull <- uses egQueue null
-  -- Pass queue through trace OP
-  -- let q = trace ("Queue is empty before pop: " ++ show queueIsNull) queue
-  eKey <- statePart egQueue $ fromJust . Heap.view
-  let eId = ekId eKey
-  event <- fromJust <$> uses egEvents (Map.!? eId)
-  -- Pass event through trace OP
-  -- let event' =
-  --       fromJust $
-  --       trace
-  --         ("Event in map is nothing (before fromJust): " ++
-  --          show (isNothing event'))
-  --         event
-  modifyPart egEvents $ Map.delete eId
-  case event ^. evType of
-    END ch _ -> modifyPart egEndIds (Map.delete (view evCell event, ch))
-    _ -> return ()
-  return event
 
 _generateEndEvent ::
   (MonadRandom m, MonadState EventGen m) =>
   Double -> Cell -> Ch -> Double -> m ()
 _generateEndEvent time cell ch lam = do
-  dt <- sampleRVar (exponential (lam :: Double))
+  dt <- sampleRVar (exponential (1.0 / lam :: Double))
   _ <- push $ Event (time + dt) (END ch Nothing) cell
   return ()
 
