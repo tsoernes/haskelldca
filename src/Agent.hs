@@ -58,7 +58,7 @@ backward alphaN alphaG frep nextFrep reward agent = res
       nextVal = forward nextInpVec wNet
       -- The (differential) temporal difference error.
       tdErr = reward - avgR + nextVal - val :: Exp Float
-      dot = (the . vvMul inpVec) wGradCorr
+      dot = (the . vvMul inpVec) wGradCorr :: Exp Float
       c = lift (-2.0 * alphaN)
       a1 = map (c * tdErr *) inpVec
       a2 = fill (constant (Z :. rOWS * cOLS * (cHANNELS + 1))) (c * avgR)
@@ -68,7 +68,7 @@ backward alphaN alphaG frep nextFrep reward agent = res
       wNet' = zipWith (-) wNet grads
       -- Update gradient correction weights
       corr = map (lift alphaG * (tdErr - dot) *) inpVec
-      wGradCorr' = zipWith (-) wGradCorr corr
+      wGradCorr' = zipWith (+) wGradCorr corr
       -- Update average reward estimate
       avgR' = avgR + tdErr
       agent' = lift (wNet', wGradCorr', unit avgR') :: Acc Agent
