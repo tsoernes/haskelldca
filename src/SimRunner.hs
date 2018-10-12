@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module SimRunner where
 
@@ -6,7 +7,7 @@ import           AccUtils
 import           Agent ( backward )
 import           Base
 import           Control.Lens
-import           Control.Monad.Reader ( MonadReader, asks, runReader )
+import           Control.Monad.Reader ( MonadReader, asks, runReader , ReaderT)
 import           Control.Monad.Extra (loopM, whenJust)
 import Data.Either
 import           Control.Monad.State
@@ -36,9 +37,12 @@ import           Debug.Trace ( trace )
 -- | Based on the reward, the agent adjusts its evaluation of the grid state
 -- | prior to action.
 -- | Return training loss if not NaN.
-runStep :: (MonadReader Opt m, MonadState SimState m) => m (Maybe Float)
-runStep = do
-  bkend <- asks backend
+
+runStep :: (MonadReader Opt m, MonadState SimState m)
+  => (Scalar Cell -> Scalar Bool -> Agent -> Grid -> Frep -> (Scalar (Maybe Ch), Frep))
+  -> (Scalar Float -> Scalar Float -> Scalar Bool -> Scalar Cell -> Scalar (Maybe Ch) -> Frep -> Frep -> Grid -> Agent -> (Grid, Agent, Scalar (Maybe Float)))
+  -> m (Maybe Float)
+runStep accFn1 accFn2 = do
   -- Pull out all arrays from state, and put them into Acc
   agent <- use ssAgent
   grid <- use ssGrid
@@ -48,18 +52,16 @@ runStep = do
   -- Select an action based on current grid and event
   let cell = scalar (event^.evCell)
       eIsEnd = scalar $ isEnd (event^.evType)
-      runner = runN bkend getAction'
-      (mbCh, frep') = runner cell eIsEnd agent grid frep
+      (mbCh, frep') = accFn1 cell eIsEnd agent grid frep
 
   -- Generate next events; receive the next event to be processed; receive a reward.
   environmentStep (theR mbCh)
 
   alphaN <- asks (scalar . alphaNet)
   alphaG <- asks (scalar . alphaGrad)
-  let runner2 = runN bkend runAcc
-      -- Execute action on the grid, then train the agent on
+  let -- Execute action on the grid, then train the agent on
       -- the state transition and reward.
-      (grid', agent', loss) = runner2 alphaN alphaG eIsEnd cell mbCh frep frep' grid agent
+      (grid', agent', loss) = accFn2 alphaN alphaG eIsEnd cell mbCh frep frep' grid agent
   -- Update the state
   ssGrid .= grid'
   ssFrep .= frep'
@@ -85,7 +87,7 @@ runAcc alphaN alphaG eIsEnd eCell mbCh frep nextFrep grid agent = A.lift (grid',
     reward' = the $ A.map A.fromIntegral reward
     A2 loss agent' = backward (the alphaN) (the alphaG) frep nextFrep reward' agent
 
-data SimStop = Success | Paused | NaNLoss | NoLoss Float | ReuseConstraintViolated | UserQuit deriving (Show)
+data SimStop = Success | Paused | NaNLoss | ZeroLoss Float | ReuseConstraintViolated | UserQuit deriving (Show)
 
 untilJust :: (Monad m) => m (a, Maybe b) -> m ([a], b)
 untilJust f = go
@@ -98,8 +100,10 @@ untilJust f = go
               Just b -> return ([], b)
 
 
-runLogIter :: (MonadReader Opt m, MonadState SimState m) => m (String, Maybe SimStop)
-runLogIter = do
+runLogIter :: forall m. (MonadReader Opt m, MonadState SimState m)
+  => m (Maybe Float)
+  -> m (String, Maybe SimStop)
+runLogIter accRunStep = do
   lgIter <- asks logIter
   nEvents' <- asks nEvents
   bend <- asks backend
@@ -109,7 +113,7 @@ runLogIter = do
   let runStep' :: (MonadReader Opt m, MonadState SimState m)
         => m (Float, Maybe SimStop)
       runStep' = do
-        mbLoss <- runStep
+        mbLoss <- accRunStep
         grid <- use ssGrid
         iTotal <- use ssIter
         return $ case mbLoss of
@@ -118,7 +122,7 @@ runLogIter = do
             | verifyRC && runExp bend (violatesReuseConstraint (A.use grid))
               -> (loss, Just ReuseConstraintViolated)
             | minLoss' > 0 && iStart > 50 && abs loss < minLoss'
-              -> (loss, Just (NoLoss loss))
+              -> (loss, Just (ZeroLoss loss))
             | iTotal == nEvents'
               -> (loss, Just Success)
             | iTotal-iStart == lgIter
@@ -126,6 +130,7 @@ runLogIter = do
             | otherwise
               -> (loss, Nothing)
   (losses, simstop) <- untilJust runStep'
+  -- Get statistics report and reset period counters
   i <- use ssIter
   report <- statePartM ssStats (statsReportLogIter i losses)
   return $ case simstop of
@@ -134,9 +139,12 @@ runLogIter = do
 
 -- | Run 'logIter' steps in the simulator then
 -- | print some statistics detailing the just-finished period.
-runLogIterWrapper :: Opt -> SimState -> IO (Either SimState (SimState, SimStop))
-runLogIterWrapper opts currentState = do
-  let (liRes, newState) = runReader (runStateT runLogIter currentState) opts
+runLogIterWrapper :: StateT SimState (ReaderT Opt Identity) (String, Maybe SimStop)
+  -> Opt
+  -> SimState
+  -> IO (Either SimState (SimState, SimStop))
+runLogIterWrapper accRunLogIter opts currentState = do
+  let (liRes, newState) = runReader (runStateT accRunLogIter currentState) opts
   putStrLn $ fst liRes
   whenJust (snd liRes) print
   return $ case snd liRes of
@@ -147,17 +155,20 @@ runLogIterWrapper opts currentState = do
 -- | and print out stats.
 runSim :: Word64 -> Opt -> IO ()
 runSim seed opts = do
+  let bkend = backend opts
+      accFn1 = runN bkend getAction'
+      accFn2 = runN bkend runAcc
   -- Execute 'nEvents' in the simulator.
   -- TODO graceful quit on CTRL-C
   -- TODO graceful quit on NaN loss
   startTime <- getCurrentTime
   let sState = runReader (mkSimState seed) opts
-      fn = runLogIterWrapper opts
+      runLogIterWrapper' = runLogIterWrapper $ runLogIter $ runStep accFn1 accFn2
+      fn = runLogIterWrapper' opts
    -- Run the simulation until a 'simstop' occurs
   (sState', _simstop) <- loopM fn sState
   -- Print the final 'statistics' report
-  let bkend = backend opts
-      nCallsInProgress = runExp bkend $ boolSum (A.use (sState'^.ssGrid))
+  let nCallsInProgress = runExp bkend $ boolSum (A.use (sState'^.ssGrid))
       i = view ssIter sState'
   putStrLn $ evalState (statsReportEnd nCallsInProgress i) (sState'^.ssStats)
   -- Print simulation duration and speed (in wall-clock time)
