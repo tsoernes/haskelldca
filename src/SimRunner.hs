@@ -15,7 +15,7 @@ import           Control.Monad.State
       MonadState,
       evalState,
       )
-import Data.Array.Accelerate (Acc, Scalar, Exp, the)
+import Data.Array.Accelerate (Acc, Scalar, the)
 import qualified Data.Array.Accelerate as A
 import           Data.Time.Clock ( diffUTCTime, getCurrentTime, NominalDiffTime )
 import           Data.Word ( Word64 )
@@ -34,13 +34,10 @@ import           Debug.Trace ( trace )
 -- | return, the caller environment emits the next event for which an action
 -- | must be selected, and a reward.
 -- | Based on the reward, the agent adjusts its evaluation of the grid state
--- | prior to action. The so-called value function yields a
--- | numeric evaluation of an arbitrary grid state which can be thought
--- | of as the degree.
--- | Return training loss, if not NaN.
+-- | prior to action.
+-- | Return training loss if not NaN.
 runStep :: (MonadReader Opt m, MonadState SimState m) => m (Maybe Float)
 runStep = do
-  -- This is the only place in the program where Acc expressions are executed.
   bkend <- asks backend
   -- Pull out all arrays from state, and put them into Acc
   agent <- use ssAgent
@@ -54,18 +51,19 @@ runStep = do
       runner = runN bkend getAction'
       (mbCh, frep') = runner cell eIsEnd agent grid frep
 
-  -- Execute the action in the environment (update grid; receive next event) and receive a reward.
+  -- Generate next events; receive the next event to be processed; receive a reward.
   environmentStep (theR mbCh)
 
   alphaN <- asks (scalar . alphaNet)
   alphaG <- asks (scalar . alphaGrad)
   let runner2 = runN bkend runAcc
-      accRes = runner2 alphaN alphaG eIsEnd cell mbCh frep frep' grid agent
-      (grid', agent', loss) = accRes
-  -- Put the results back into the state
+      -- Execute action on the grid, then train the agent on
+      -- the state transition and reward.
+      (grid', agent', loss) = runner2 alphaN alphaG eIsEnd cell mbCh frep frep' grid agent
+  -- Update the state
+  ssGrid .= grid'
   ssFrep .= frep'
   ssAgent .= agent'
-  ssGrid .= grid'
   return $ theR loss
 
 
