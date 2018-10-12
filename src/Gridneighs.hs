@@ -1,23 +1,30 @@
 module Gridneighs where
 
 import Base ( cOLS, gridIdxs, rOWS, Cell )
+import AccUtils
 import Data.Array.Accelerate
-    ( Exp, Acc, Array, DIM1, DIM3, index3, (:.)((:.)), Z(Z) )
+    ( Exp, Acc, Array, DIM1, DIM3, index3, (:.)((:.)), Z(Z), unlift, cond, slit, flatten, scatter, slice, constant, fill, lift, enumFromStepN, index1, All(..) )
 import qualified Data.Array.Accelerate as A
-    ( fromList, (!), use, slit, Lift(lift) )
 
 -- (V  , M)
 _neighs :: Acc (Array DIM1 Cell)
 _nNeighs :: Acc (Array DIM3 Int)
 (_neighs, _nNeighs) = generateNeighsAcc
 
+_segs :: Acc (Array DIM1 Int)
+_segs = generateSegs
+
 -- Return a vector of indices of cells at distance 'd' or less from the given cell.
 -- The boolean parameter determines if the given cell itself is included in the list.
 getNeighborhoodAcc :: Int -> (Exp Int, Exp Int) -> Bool -> Acc (Array DIM1 Cell)
-getNeighborhoodAcc d cell includeself = A.slit start n _neighs
+getNeighborhoodAcc d cell includeself = slit start n _neighs
   where
     (start, n) = getNeighborhoodOffsets d cell includeself
 
+getNeighborhoodAcc' :: Exp Int -> Exp Cell -> Exp Bool -> Acc (Array DIM1 Cell)
+getNeighborhoodAcc' d cell includeself = slit start n _neighs
+  where
+    (start, n) = unlift $ getNeighborhoodOffsets' d cell includeself
 
 getNeighborhoodOffsets :: Int -> (Exp Int, Exp Int) -> Bool -> (Exp Int, Exp Int)
 getNeighborhoodOffsets d (r,c) includeself = (start', n')
@@ -27,7 +34,15 @@ getNeighborhoodOffsets d (r,c) includeself = (start', n')
     n = _nNeighs A.! index3 r c (A.lift d)
     n' = if includeself then n else n - 1
 
--- Returns a vector V of cells and a matrix M of integers.
+getNeighborhoodOffsets' :: Exp Int -> Exp Cell -> Exp Bool -> Exp Cell
+getNeighborhoodOffsets' d (T2 r c) includeself = A.lift (start', n')
+  where
+    start = _nNeighs A.! index3 r c 0
+    start' = cond includeself start (start + 1)
+    n = _nNeighs A.! index3 r c (A.lift d)
+    n' = cond includeself n (n - 1)
+
+-- Returns a vector V of cells and a 3D-array M of integers.
 -- M is of shape RxCx5 where R and C are the number of
 -- rows and columns in the grid and thus has
 -- a vector (henceforth M[r, c]) of length 5 for each cell (r, c) in grid.
@@ -57,6 +72,15 @@ generateNeighsAcc = (neighsArr, nNeighsArr)
         (cellNeighs, cellNNeighs) = neighborhood idx
         n'' = n' + length cellNeighs
         nNeighs'' = nNeighs' ++ n' : cellNNeighs
+
+-- | Only used to verify reuse constraint
+generateSegs :: Acc (Array DIM1 Int)
+generateSegs = segs
+  where
+    neigh_segs = flatten $ slice _nNeighs (constant (Z :. All :. All :. (2::Int)))
+    neigh_segs' = A.map (\s -> s - 1) neigh_segs
+    focal_segs = fill (lift (Z :. 2 * A.length neigh_segs)) (constant 1)
+    segs = scatter (enumFromStepN (index1 $ A.length neigh_segs) 1 2) focal_segs neigh_segs'
 
 getNeighs :: Int -> Cell -> Bool -> [Cell]
 getNeighs d (r, c) includeself =

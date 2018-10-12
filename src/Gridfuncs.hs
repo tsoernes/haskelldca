@@ -3,95 +3,141 @@
 
 module Gridfuncs where
 
-import           AccUtils ( boolSum, index4 )
+import           AccUtils
 import           Base
-import           Control.Arrow ( Arrow((***)) )
 import           Data.Array.Accelerate
-import           Gridneighs ( getNeighborhoodAcc, getNeighborhoodOffsets, getNeighs, _neighs )
+import qualified Data.Array.Accelerate as A
+import           Gridneighs
 import qualified Prelude as P
+import Opt
+import Control.Monad.Reader (MonadReader, asks)
 
+-- | Only used internally for testing
+afterstate :: Cell -> Ch -> Bool -> Acc Grid -> Acc Grid
+afterstate (r, c) ch v grid = permute const grid setIdx (unit $ lift v)
+  where
+    setIdx _ = constant (Z :. r :. c :. ch) :: Exp DIM3
 
-mkGrid :: Grid
-mkGrid = fill (constant (Z :. rOWS :. cOLS :. cHANNELS)) (lift False)
+mkGrid :: (MonadReader Opt m) => m Grid
+mkGrid = do
+  bend <- asks backend
+  P.return $ run bend $ fill (constant (Z :. rOWS :. cOLS :. cHANNELS)) (lift False)
 
-mkFrep :: Frep
-mkFrep = fill (constant (Z :. rOWS :. cOLS :. cHANNELS + 1)) 0
+mkAGrid :: Acc Grid
+mkAGrid = fill (constant (Z :. rOWS :. cOLS :. cHANNELS)) (lift False)
 
--- mkFreps :: Exp Int -> Freps
--- mkFreps i = fill (index4 (lift i) (lift rOWS) (lift cOLS) (lift cHANNELS + 1)) 0
+mkFrep :: (MonadReader Opt m) => m Frep
+mkFrep = do
+  bend <- asks backend
+  P.return $ run bend $ fill (constant (Z :. rOWS :. cOLS :. cHANNELS + 1)) 0
 
--- TODO can the inuse/elig maps be improved by using Acc neighs instead of lists ..
+-- | Get the allocation map of a particular cell
+sliceCell :: Cell -> Acc Grid -> Acc GridCell
+sliceCell (r, c) grid = slice grid (constant (Z :. r :. c :. All))
+
+sliceCell' :: Exp Cell -> Acc Grid -> Acc GridCell
+sliceCell' (T2 r c) grid = slice grid (lift (Z :. r :. c :. All))
+
+sliceNeighs :: Acc (Array DIM1 Cell) -> Acc Grid -> Acc (Array DIM2 Bool)
+sliceNeighs neighs grid = allNeighs
+  where
+    allNeighsSh = lift (Z :. length neighs :. cHANNELS) :: Exp DIM2
+    allNeighs = backpermute allNeighsSh ixTrans grid
+    ixTrans :: Exp DIM2 -> Exp DIM3
+    ixTrans (D2 i ch) = lift (Z :. r :. c :. ch)
+      where
+        T2 r c = neighs ! index1 i
 
 -- | One-hot map of channels in use at cell neighbors with distance of 2 or less
-inuseNeighsMap :: Cell -> Grid -> GridCell
-inuseNeighsMap cell grid =
-  P.foldl1 (zipWith (||)) (P.map (`sliceCell` grid) neighs)
+inuseNeighsMap :: Exp Cell -> Acc Grid -> Acc GridCell
+inuseNeighsMap cell grid = fold1 (||) (transpose allNeighs)
   where
-    neighs = getNeighs 2 cell False
+    neighs = getNeighborhoodAcc' 2 cell (constant False)
+    allNeighs = sliceNeighs neighs grid
 
 -- | One-hot array of eligible channels
-eligibleMap :: Cell -> Grid -> GridCell
+eligibleMap :: Cell -> Acc Grid -> Acc GridCell
 eligibleMap cell grid = map not notEmap
   where
     neighs = getNeighs 2 cell False
     -- One-hot vector where 'true' means that a channel is not eligible
     notEmap = P.foldl bitor (sliceCell cell grid) neighs
-    bitor :: GridCell -> Cell -> GridCell
+    bitor :: Acc GridCell -> Cell -> Acc GridCell
     bitor gc cell' = zipWith (||) gc (sliceCell cell' grid)
 
--- | Get the allocation map of a particular cell
-sliceCell :: Cell -> Grid -> GridCell
-sliceCell (r, c) grid = slice grid (constant (Z :. r :. c :. All))
 
--- | Return the eligible channels for the given cell. A channel is eligible if it is free at
--- | the cell and all of its neighbors with distance of 2 or less.
-eligibleChs :: Cell -> Grid -> Chs
+-- | One-hot array of eligible channels
+-- | TODO NOTE need to test this ..
+eligibleMap' :: Exp Cell -> Acc Grid -> Acc GridCell
+eligibleMap' cell grid = map not notEmap
+  where
+    -- Gather alloc map of each neigh into an array
+    neighs = getNeighborhoodAcc' 2 cell (constant True)
+    allNeighs = sliceNeighs neighs grid
+    -- One-hot vector where 'true' means that a channel is not eligible
+    notEmap = fold1 (||) (transpose allNeighs)
+
+-- | Return the eligible channels for the given cell. A channel is eligible if it is free
+-- | (i.e. False; not in use) in the cell and all of its neighbors with distance of 2 or less.
+eligibleChs :: Cell -> Acc Grid -> Acc Chs
 eligibleChs cell grid = indicesOf $ eligibleMap cell grid
 
+eligibleChs' :: Exp Cell -> Acc Grid -> Acc Chs
+eligibleChs' cell grid = indicesOf $ eligibleMap' cell grid
+
 -- | Return the channels in use at the given cell.
-inuseChs :: Cell -> Grid -> Chs
+inuseChs :: Cell -> Acc Grid -> Acc Chs
 inuseChs cell grid = indicesOf $ sliceCell cell grid
+
+-- | Return the channels in use at the given cell.
+inuseChs' :: Exp Cell -> Acc Grid -> Acc Chs
+inuseChs' cell grid = indicesOf $ sliceCell' cell grid
 
 -- | Convert a one-hot vector (sparse repr) to a vector of indecies (dense repr)
 indicesOf :: Acc (Array DIM1 Bool) -> Acc (Array DIM1 Int)
 indicesOf arr = iHot
   where
     seArr = indexed arr :: Acc (Array DIM1 (DIM1, Bool))
-    -- Filter out (index, elem) pairs where elem is not True
-    seHot = filter snd seArr :: Acc (Array DIM1 (DIM1, Bool), Array DIM0 Int)
-    -- Keep only the indices (as ints)
-    pair = unlift seHot :: (Acc (Array DIM1 (DIM1, Bool)), Acc (Array DIM0 Int))
-    sHot = P.fst pair :: Acc (Array DIM1 (DIM1, Bool))
-    iHot = map (unindex1 . fst) sHot :: Acc (Array DIM1 Int)
+    -- Filter out (index, elem) pairs where elem is not True,
+    -- and keep only the indices (as ints)
+    shHot = afst $ filter snd seArr
+    iHot = map (unindex1 . fst) shHot :: Acc (Array DIM1 Int)
 
--- TODO
--- Throws an error if the reuse constraint is violated
--- validateReuseConstraint :: Grid -> Bool
--- validateReuseConstraint grid = P.any P.not $ P.map checkIdx gridIdxs
---   where
---     checkIdx :: Cell -> Bool
---     checkIdx idx = undefined
---       where
---         inuseNeighs = (inuseMap idx grid) :: GridCell
---         inuseSelf = (sliceCell idx grid) :: GridCell
---         -- viols = any P.id $ zipWith (&&) inuseSelf inuseNeighs :: Acc (Scalar Bool)
---         viols = any P.id $ zipWith (&&) inuseSelf inuseNeighs :: Acc (Array DIM0 Bool)
---         xx = run viols :: Scalar Bool
---         yy = unlift xx
---         tviols = the viols :: Exp Bool
+-- | Return 'True' if the reuse constraint is violated.
+-- | (WHICH SHOULD NEVER HAPPEN; there's a bug in the program)
+-- | If a channel is in use at a focal cell and any of
+-- | neighbors withing distance of 2, then the reuse constraint is violated.
+violatesReuseConstraint :: Acc Grid -> Exp Bool
+violatesReuseConstraint grid = (the . or . flatten) violatesPerCh
+  where
+    -- C0 C0N0 C0N1 C0N2 .. C0Nx C1N0 C1N1 .. C1Ny ..
+    -- 'allNeighs' should be thought of as a vector of grid cells.
+    allNeighs = transpose $ sliceNeighs _neighs grid :: Acc (Array DIM2 Bool)
+    alternates = fold1Seg (||) allNeighs _segs :: Acc (Array DIM2 Bool)
+    twoSegs = fill (index1 . lift $ rOWS * cOLS) 2 :: Acc (Array DIM1 Int)
+    violatesPerChPerCell = fold1Seg (&&) alternates twoSegs
+    violatesPerCh = fold1 (||) violatesPerChPerCell
 
 -- | Switch bit at given cell off for END events; on for NEW events
-executeAction :: Event -> Ch -> Grid -> Grid
+executeAction :: Event -> Ch -> Acc Grid -> Acc Grid
 executeAction Event {_evType, _evCell = (r, c)} toCh grid =
   let val = unit $ lift $ P.not $ isEnd _evType
       setIdx :: Exp DIM0 -> Exp DIM3
       setIdx _ = constant (Z :. r :. c :. toCh)
    in permute const grid setIdx val
 
+executeAction' :: Exp Bool -> Exp Cell -> Exp Ch -> Acc Grid -> Acc Grid
+executeAction' eIsEnd (T2 r c) toCh grid =
+  let val = unit $ not eIsEnd
+      setIdx :: Exp DIM0 -> Exp DIM3
+      setIdx _ = lift (Z :. r :. c :. toCh)
+   in permute const grid setIdx val
+
+
 -- | Given a grid 'grid' and a set of actions, the latter specified by a cell, an event type
 -- | and a list of channels, return the grids ('afterstates') that would result from
 -- | executing each of the actions on 'grid'
-afterstates :: Grid -> Cell -> EType -> Chs -> Grids
+afterstates :: Acc Grid -> Cell -> EType -> Acc Chs -> Acc Grids
 afterstates grid (r, c) etype chs = permute const grids idxmap vals
   where
     vals =
@@ -106,12 +152,12 @@ afterstates grid (r, c) etype chs = permute const grids idxmap vals
 -- | specifies how many times each of the channels is in used within a 4-cell radius,
 -- | not including the cell itself. An additional feature counts the number of eligible
 -- | channels in that cell.
-featureRep :: Grid -> Frep
+featureRep :: Acc Grid -> Acc Frep
 featureRep grid = P.foldl fn zeros gridIdxs
   where
     zeros = fill (constant (Z :. rOWS :. cOLS :. cHANNELS + 1)) 0
     -- Fill in 1 cell at a time
-    fn :: Frep -> Cell -> Frep
+    fn :: Acc Frep -> Cell -> Acc Frep
     fn frep (r, c) = permute const frep idxmap (nUsed ++ nElig)
       where
         nUsedZ = fill (constant (Z :. cHANNELS + 1)) 0 :: Acc (Vector Int)
@@ -139,19 +185,19 @@ featureRep grid = P.foldl fn zeros gridIdxs
 -- (see e.g. the `incremental_freps` function in `gridfuncs_numba.py` in the Python DCA project)
 -- 3: Then do #2, for all actions that are possible in the current state,
 -- without introducing nested data parallelism.
-incAfterStateFreps :: Grid -> Frep -> Cell -> EType -> Chs -> Freps
-incAfterStateFreps grid frep cell@(r, c) etype chs = nInuse ++ nElig
+incAfterStateFreps :: Exp Cell -> Exp Bool -> Acc Chs -> Acc Grid -> Acc Frep -> Acc Freps
+incAfterStateFreps cell@(T2 r c) eIsEnd chs grid frep = nInuse ++ nElig
   where
     -- The value of a feature will change by (+1) or (-1) depending on the event and
     -- feature type, if it changes at all.
-    diff = if isEnd etype then -1 else 1
+    diff = cond eIsEnd (-1) 1
     zgrid = permute const grid fillCell (fill (shape chs) (lift False))
-    grid' = if isEnd etype then zgrid else grid
+    grid' = acond eIsEnd zgrid grid
     fillCell sh = lift (Z :. r :. c :. unindex1 sh)
 
-    afreps = replicate (lift (Z :. length chs :. All :. All :. All)) frep :: Freps
-    neighs2 = getNeighborhoodAcc 2 ((lift *** lift) cell) True
-    neighs4 = getNeighborhoodAcc 4 ((lift *** lift) cell) False
+    afreps = replicate (lift (Z :. length chs :. All :. All :. All)) frep :: Acc Freps
+    neighs2 = getNeighborhoodAcc' 2 cell (constant True)
+    neighs4 = getNeighborhoodAcc' 4 cell (constant False)
 
     -- Compute the inuse features
     nIinit = init afreps
@@ -159,9 +205,9 @@ incAfterStateFreps grid frep cell@(r, c) etype chs = nInuse ++ nElig
     icomb :: Exp DIM2 -> Exp DIM4
     icomb sh = lift (Z :. ch_i :. r' :. c' :. ch)
       where
-        (ch_i, neigh_i) = unlift $ unindex2 sh :: (Exp Int, Exp Int)
+        T2 ch_i neigh_i = unindex2 sh
         ch = chs ! index1 ch_i
-        (r', c') = unlift $ neighs4 ! index1 neigh_i :: (Exp Int, Exp Int)
+        T2 r' c' = neighs4 ! index1 neigh_i
 
     -- Compute the eligibility feature
     nEinit = drop (lift cHANNELS) afreps
@@ -171,22 +217,20 @@ incAfterStateFreps grid frep cell@(r, c) etype chs = nInuse ++ nElig
     idxComb :: Exp DIM2 -> Exp DIM4
     idxComb sh = lift (Z :. ch_i :. r' :. c' :. (0 :: Int))
       where
-        (ch_i, neigh_i) = unlift $ unindex2 sh :: (Exp Int, Exp Int)
-        (r', c') = unlift $ neighs2 ! index1 neigh_i  :: (Exp Int, Exp Int)
+        T2 ch_i neigh_i = unindex2 sh
+        T2 r' c' = neighs2 ! index1 neigh_i
 
     -- Compute the change in eligibility feature
     eligDiff = replicate (lift (Z :. All :. length neighs2)) chs
     eligDiff' = imap mapCh eligDiff
     mapCh :: Exp DIM2 -> Exp Int -> Exp Int
-    mapCh sh ch = (-1) * diff * (boolToInt . not $ notElig)
+    mapCh (D2 _ neighIx) ch = (-1) * diff * (boolToInt . not $ notElig)
       where
-        (_, neigh_i) = unlift $ unindex2 sh :: (Exp Int, Exp Int) -- (ch_idx, neigh2_idx)
-        (r', c') = unlift $ neighs2 ! index1 neigh_i  :: (Exp Int, Exp Int)
+        T2 r' c' = neighs2 ! index1 neighIx
         (start, n) = getNeighborhoodOffsets 2 (r', c') True :: (Exp Int, Exp Int)
         notElig = fst $ iterate n orNeigh (lift (False, start))
         orNeigh :: Exp (Bool, Int) -> Exp (Bool, Int)
-        orNeigh acc = lift (acc_diff || neighBit, acc_idx + 1)
+        orNeigh (T2 acc_diff acc_idx) = lift (acc_diff || neighBit, acc_idx + 1)
           where
-            (acc_diff, acc_idx) = unlift acc :: (Exp Bool, Exp Int)
-            (r'', c'') = unlift $ _neighs ! index1 acc_idx
+            T2 r'' c'' = _neighs ! index1 acc_idx
             neighBit = grid' ! index3 r'' c'' ch

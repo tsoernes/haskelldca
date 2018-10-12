@@ -1,17 +1,20 @@
 module TestBase where
 
-import Base
 import Data.Maybe (fromJust)
 import Data.Word (Word64)
 import Opt
 import Options.Applicative
-import Test.Hspec
 import Debug.Trace (trace)
 
 seed :: Word64
 seed = 0
 
--- Get default (pure) options and print them (or the failure of parsing defaults)
-_opts = info (getOpts <**> helper) fullDesc
-res = execParserPure defaultPrefs _opts []
-popts = fromJust $ getParseResult $ trace ("\n" ++ show res) res
+-- | Default (pure) options.
+-- | Will print options on import (or the failure of parsing the defaults)
+popts :: Opt
+popts = fromJust $ getParseResult $ trace ("\n" ++ show _optParse) _optParse
+  where
+    _optParse :: ParserResult Opt
+    _optParse = execParserPure defaultPrefs _opts []
+    _opts :: ParserInfo Opt
+    _opts = info (getOpts <**> helper) fullDesc

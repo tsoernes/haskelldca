@@ -75,6 +75,8 @@ reassign cell fromCh toCh = do
       eId <- state $ mapRemove (cell, fromCh)
       modify' $ Map.insert (cell, toCh) eId
       return eId
+  -- Change the 'toCh' field of the 'eId' event in the event-hashmap to
+  -- reflect the channel reassignment
   modifyPart egEvents $ Map.adjust (\ev -> set evType (END toCh (hoffCell $ view evType ev)) ev) eId
   return ()
 

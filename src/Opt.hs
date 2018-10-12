@@ -22,6 +22,7 @@ data Opt = Opt
   , alphaGrad :: Float
   , verifyReuseConstraint :: Bool
   , backend :: Backend
+  , minLoss :: Float
 } deriving (Show)
 
 getOpts :: Parser Opt
@@ -65,7 +66,10 @@ getOpts =
      value 5e-6 <>
      help "") <*>
   switch (long "verify_reuse_constraint") <*>
-  option bendOpt (long "backend" <> value Interpreter <> showDefault <> help bendOptStr)
+  option bendOpt (long "backend" <> value Interpreter <> showDefault <> help bendOptStr)  <*>
+  option
+    auto
+    (long "min_loss" <> showDefault <> value 1e-5 <> help "Quit if loss goes below given abs. Set to 0 to disable")
 
 bendOptStr :: String
 bendOptStr = "Accepted backends are 'interp' for 'Interpreter' and 'cpu' for 'LLVM.Native'."

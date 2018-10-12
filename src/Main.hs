@@ -5,7 +5,6 @@ import Opt ( getOpts )
 import Options.Applicative ( (<**>), fullDesc, header, info, execParser, helper )
 import SimRunner ( runSim )
 
-
 main :: IO ()
 main = do
   let opts =
@@ -17,4 +16,5 @@ main = do
   print popts
   let seed = 0 :: Word64
   runSim seed popts
+
   return ()

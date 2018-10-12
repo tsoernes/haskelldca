@@ -4,7 +4,8 @@ module Base where
 
 import Control.Arrow ( (***) )
 import Control.Lens ( makeLenses )
-import Data.Array.Accelerate ( fill, constant, (:.)((:.)), Array, DIM1, DIM3, DIM4, Z(Z), Acc, Exp, Lift(lift) )
+import Data.Array.Accelerate ( fill, Scalar, constant, (:.)((:.)), Array, DIM1, DIM3, DIM4, Z(Z), Acc, Exp, Lift(lift) )
+import qualified Data.Array.Accelerate as A
 import Prelude as P
 
 -- Grid dimensions and (system-wide) bandwidth.
@@ -16,29 +17,29 @@ cHANNELS = 70
 gridIdxs :: [Cell]
 gridIdxs = concat [[(r, c) | c <- [0 .. cOLS - 1]] | r <- [0 .. rOWS - 1]]
 
-gridIdxsExp :: [(Exp Int, Exp Int)]
-gridIdxsExp = P.map (lift *** lift) gridIdxs
+gridIdxsExp :: Acc (Array DIM1 Cell)
+gridIdxsExp = A.use $ A.fromList (Z :. length gridIdxs) gridIdxs
 
 -- | For a given cell, which channels are in use
-type GridCell = Acc (Array DIM1 Bool)
+type GridCell = Array DIM1 Bool
 
 -- | The grid keeps track of which channels are in use where.
 -- | If `grid[row][col][ch]==True`, then channel `ch` is currently
--- | in use at the cell with coordinates (row, col).
--- | A channel can be assigned (set from False to True) in a cell iff
+-- | in use at the cell with coordinates row, col.
+-- | A channel can be assigned set from False to True in a cell iff
 -- | there are no neighbors with hexagonal distance of 2 or less
 -- | that already use the channel.
-type Grid = Acc (Array DIM3 Bool)
+type Grid = Array DIM3 Bool
 
-type Grids = Acc (Array DIM4 Bool)
+type Grids = Array DIM4 Bool
 
 -- | Feature representation of a grid
-type Frep = Acc (Array DIM3 Int)
+type Frep = Array DIM3 Int
 
-type Freps = Acc (Array DIM4 Int)
+type Freps = Array DIM4 Int
 
--- | A set of channels, each in the range [0..cHANNELS)
-type Chs = Acc (Array DIM1 Int)
+-- | A set of channels, each in the range [0,1,...,cHANNELS.
+type Chs = Array DIM1 Int
 
 -- NOTE this type alias is perhaps a bit deceptive given that the plural form is
 -- an Acc expression
@@ -71,10 +72,10 @@ isEnd NEW = False
 isEnd (END _ _) = True
 isEnd HOFF = False
 
-isHoff :: EType -> Bool
-isHoff NEW = False
-isHoff (END _ _) = False
-isHoff HOFF = True
+-- | If the event is an END event and is scheduled to hand off.
+willHoff :: EType -> Bool
+willHoff (END _ (Just _)) = True
+willHoff _ = False
 
 hoffCell :: EType -> Maybe Cell
 hoffCell (END _ mbc) = mbc
@@ -90,18 +91,34 @@ data Event = Event
 
 makeLenses ''Event
 
-data Agent = Agent
-  { _avgReward :: Exp Float
-  , _wNet :: Acc (Array DIM1 Float)
-  , _wGradCorr :: Acc (Array DIM1 Float)
-  }
+-- All arrays and scalars that form a part of the state and that should be run with Accelerate
+-- are put in tuple aliases. Allows for "Acc SomeState -> Acc SomeState" expressions w/o
+-- deriving "instance Arrays SomeState".
 
-makeLenses ''Agent
+-- (wNet, wGradCorr, avgReward)
+type Agent = ( Array DIM1 Float, Array DIM1 Float, Scalar Float )
+-- Useful for unlifting the type above into its parts
+type AccAgent = ( Acc (Array DIM1 Float), Acc (Array DIM1 Float), Acc (Scalar Float) )
 
-mkAgent :: Agent
-mkAgent = Agent 0.0 mk mk
-  where
-    mk = fill (constant (Z :. rOWS * cOLS * (cHANNELS + 1))) 0.0
+agWNet :: Agent -> Array DIM1 Float
+agWNet (n, _, _) = n
+
+agWGradCorr :: Agent -> Array DIM1 Float
+agWGradCorr (_, g, _) = g
+
+agAvgReward :: Agent -> Scalar Float
+agAvgReward (_, _, a) = a
+
+
+-- (grid, frep)
+-- type GridState = ( Grid, Frep )
+
+-- gsGrid :: GridState -> Grid
+-- gsGrid (g, _) = g
+
+-- gsFrep :: GridState -> Frep
+-- gsFrep (_, f) = f
+
 
 data Backend
   = Interpreter
