@@ -5,26 +5,31 @@ simulated mobile caller environment.
 The implementation is in Haskell and uses [Accelerate](https://github.com/AccelerateHS/accelerate/) for numerical work.
 
 It is a near-complete Rust port of the best performing agent (AA-VNet) 
-from [](https://github.com/tsoernes/dca). This agent utilizes a linear neural network
+from https://github.com/tsoernes/dca. This agent utilizes a linear neural network
 as state value function approximator which is updated using a newly proposed variant of 
 TDC gradients, originally defined in [Sutton et al. 2009](https://www.ics.uci.edu/~dechter/courses/ics-295/winter-2018/papers/2009-sutton-Fast_gradient-descent.pdf): 
 "Fast gradient-descent methods for temporal-difference learning with linear function approximation."
 
-See also the version written in Rust [](https://github.com/tsoernes/rustdca),
-and Python [](https://github.com/tsoernes/dca).
+See also the version written in [Rust](https://github.com/tsoernes/rustdca),
+and [Python](https://github.com/tsoernes/dca).
 
-# How to build 
+## How to build 
 The following builds with O2 and other optimizations.
 ```
 stack build --stack-yaml stack-release.yaml
 ```
 If you want a regular build with profiling flags etc; then drop the `--stack-yaml` option.
 
-# How to run
+## How to run
 ```
 stack exec --stack-yaml stack-release.yaml dca-exe -- --backend cpu
 ```
-If you don't have Accelerate.LLVM.Native, then skip the `--backend cpu` flag to use the Interpreter.
+Which will run the project, and on startup generate a full computational graph which 
+contains both the caller network simulator and the agents neural network. 
+The computational graph is compiled using `Accelerate.LLVM.Native`, and executed
+on the CPU. To use Accelerate's build-in interpreter instead, skip the `--backend cpu` flag.
+Support for executing the graph on the GPU can be obtained by adding the dependency 
+`accelerate-llvm-ptx` and switching out the imports in `AccUtils.hs`.
 
 To see available options, run:
 ```
