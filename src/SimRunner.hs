@@ -40,7 +40,7 @@ import           Debug.Trace ( trace )
 
 runStep :: (MonadReader Opt m, MonadState SimState m)
   => (Scalar Cell -> Scalar Bool -> Agent -> Grid -> Frep -> (Scalar (Maybe Ch), Frep))
-  -> (Scalar Float -> Scalar Float -> Scalar Bool -> Scalar Cell -> Scalar (Maybe Ch) -> Frep -> Frep -> Grid -> Agent -> (Grid, Agent, Scalar (Maybe Float)))
+  -> (Scalar Float -> Scalar Float -> Scalar Float -> Scalar Bool -> Scalar Cell -> Scalar (Maybe Ch) -> Frep -> Frep -> Grid -> Agent -> (Grid, Agent, Scalar (Maybe Float)))
   -> m (Maybe Float)
 runStep accFn1 accFn2 = do
   -- Pull out all arrays from state, and put them into Acc
@@ -58,10 +58,11 @@ runStep accFn1 accFn2 = do
   environmentStep (theR mbCh)
 
   alphaN <- asks (scalar . alphaNet)
+  alphaA <- asks (scalar . alphaAvg)
   alphaG <- asks (scalar . alphaGrad)
   let -- Execute action on the grid, then train the agent on
       -- the state transition and reward.
-      (grid', agent', loss) = accFn2 alphaN alphaG eIsEnd cell mbCh frep frep' grid agent
+      (grid', agent', loss) = accFn2 alphaN alphaA alphaG eIsEnd cell mbCh frep frep' grid agent
   -- Update the state
   ssGrid .= grid'
   ssFrep .= frep'
@@ -71,6 +72,7 @@ runStep accFn1 accFn2 = do
 
 runAcc :: Acc (Scalar Float)
   -> Acc (Scalar Float)
+  -> Acc (Scalar Float)
   -> Acc (Scalar Bool)
   -> Acc (Scalar Cell)
   -> Acc (Scalar (Maybe Ch))
@@ -79,13 +81,13 @@ runAcc :: Acc (Scalar Float)
   -> Acc Grid
   -> Acc Agent
   -> Acc (Grid, Agent, Scalar (Maybe Float))
-runAcc alphaN alphaG eIsEnd eCell mbCh frep nextFrep grid agent = A.lift (grid', agent', loss)
+runAcc alphaN alphaA alphaG eIsEnd eCell mbCh frep nextFrep grid agent = A.lift (grid', agent', loss)
   where
     A2 reward grid' = gridStep (the eIsEnd) (the eCell) (the mbCh) grid
     -- Train agent on the just received experience consisting of
     -- the state transition (in feature space) and a reward.
     reward' = the $ A.map A.fromIntegral reward
-    A2 loss agent' = backward (the alphaN) (the alphaG) frep nextFrep reward' agent
+    A2 loss agent' = backward (the alphaN) (the alphaA) (the alphaG) frep nextFrep reward' agent
 
 data SimStop = Success | Paused | NaNLoss | ZeroLoss Float | ReuseConstraintViolated | UserQuit deriving (Show)
 

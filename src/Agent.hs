@@ -39,12 +39,13 @@ forward frep weights = the $ vvMul frep weights
 -- |
 backward :: Exp Float
   -> Exp Float
+  -> Exp Float
   -> Acc Frep
   -> Acc Frep
   -> Exp Float
   -> Acc Agent
   -> Acc (Scalar (M.Maybe Float), Agent)
-backward alphaN alphaG frep nextFrep reward agent = res
+backward alphaN alphaA alphaG frep nextFrep reward agent = res
   where
     -- avgR = agent^._3
       (wNet, wGradCorr, avgR_) = A.unlift agent :: AccAgent
@@ -58,7 +59,7 @@ backward alphaN alphaG frep nextFrep reward agent = res
       nextVal = forward nextInpVec wNet
       -- The (differential) temporal difference error.
       tdErr = reward - avgR + nextVal - val :: Exp Float
-      dot = (the . vvMul inpVec) wGradCorr :: Exp Float
+      dot = the $ vvMul inpVec wGradCorr :: Exp Float
       c = lift (-2.0 * alphaN)
       a1 = map (c * tdErr *) inpVec
       a2 = fill (constant (Z :. rOWS * cOLS * (cHANNELS + 1))) (c * avgR)
@@ -70,7 +71,7 @@ backward alphaN alphaG frep nextFrep reward agent = res
       corr = map (lift alphaG * (tdErr - dot) *) inpVec
       wGradCorr' = zipWith (+) wGradCorr corr
       -- Update average reward estimate
-      avgR' = avgR + tdErr
+      avgR' = avgR + alphaA * tdErr
       agent' = lift (wNet', wGradCorr', unit avgR') :: Acc Agent
       loss = A.cond (A.isNaN tdErr) (constant M.Nothing) (lift (M.Just tdErr))
       res = lift (unit loss, agent')
