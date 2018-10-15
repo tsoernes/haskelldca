@@ -18,7 +18,7 @@ is applied to solving it, see:
 https://brage.bibsys.no/xmlui/bitstream/handle/11250/2562774/19523_FULLTEXT.pdf):
 Contributions to centralized dynamic channel allocation reinforcement learning agents
 
-See also the version written in [Rust](https://github.com/tsoernes/rustdca),
+See also the version written in [Rust](https://github.com/tsoernes/rustdca)
 and [Python](https://github.com/tsoernes/dca).
 
 ## How to build 
@@ -26,7 +26,7 @@ The following builds with O2 and other optimizations.
 ```
 stack build --stack-yaml stack-release.yaml
 ```
-If you want a regular build with profiling flags etc; then drop the `--stack-yaml` option.
+To build without optimizations but with profiling flags, drop the `--stack-yaml ..` option.
 
 ## How to run
 ```
