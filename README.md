@@ -9,8 +9,7 @@ is a near-complete port of the best-performing agent (AA-VNet) from
 uses a linear neural network as state value function approximator, which is
 trained using a newly proposed average-reward variant of TDC gradients,
 originally defined for discounted returns in
-[Sutton et al. 2009]
-(https://www.ics.uci.edu/~dechter/courses/ics-295/winter-2018/papers/2009-sutton-Fast_gradient-descent.pdf):
+[Sutton et al. 2009](https://www.ics.uci.edu/~dechter/courses/ics-295/winter-2018/papers/2009-sutton-Fast_gradient-descent.pdf):
 "Fast gradient-descent methods for temporal-difference learning with linear function approximation."
 
 For an introduction to the channel allocation problem and how RL 
@@ -67,3 +66,4 @@ stack exec --stack-yaml stack-release.yaml dca-exe -- --help
 
 ### TODO
 - Implement hand-off look-ahead
+- Fix zero loss issue
