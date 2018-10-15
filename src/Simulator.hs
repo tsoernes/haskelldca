@@ -126,7 +126,7 @@ gridStep eIsEnd eCell act grid = tup
   -- Execute action, if any, on the grid and return resulting call count as reward
   grid' = A.acond (M.isNothing act)
     grid
-    (executeAction' eIsEnd eCell (M.fromJust act) grid)
+    (executeAction eIsEnd eCell (M.fromJust act) grid)
   reward = boolSum grid
   tup = A.lift (A.unit reward, grid')
 
@@ -146,10 +146,10 @@ getAction cell eIsEnd agent grid frep = res
   where
     -- For NEW/HOFF events, the action space consists of the channels
     -- that are eligible in 'cell'.
-    elig = eligibleChs' cell grid
+    elig = eligibleChs cell grid
     -- For END events, pick a channel in use to reassign to the channel that will
     -- terminate.
-    inuse = inuseChs' cell grid
+    inuse = inuseChs cell grid
     chs = A.acond eIsEnd inuse elig :: A.Acc Chs
     A3 _idxSh _qval _nextFrep = selectAction cell eIsEnd chs agent grid frep
     -- (_idxSh, _qval, _nextFrep) = A.unlift saRes :: (Acc (Scalar DIM1), Acc (Scalar Float), Acc Frep)

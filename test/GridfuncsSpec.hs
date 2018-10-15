@@ -25,7 +25,7 @@ spec = do
     -- That should be the only channel in use
     let ch = 13
         grid' = afterstate (3, 3) ch True grid
-        actual = toList $ run bkend $ inuseChs (3, 3) grid'
+        actual = toList $ run bkend $ inuseChs (constant (3, 3)) grid'
         target = [ch]
     it "One ch in use" $ actual `shouldBe` target
 
@@ -36,9 +36,9 @@ spec = do
     let ch = 0
         setIdx _ = constant (Z :. 3 :. 2 :. ch) :: Exp DIM3
         grid' = permute const grid setIdx (unit $ lift True)
-        cell = (3, 3)
+        cell = constant (3, 3)
         actual = toList $ run bkend $ eligibleChs cell grid'
-        actual' = toList $ run bkend $ eligibleChs' (constant cell) grid'
+        actual' = toList $ run bkend $ eligibleChs cell grid'
         target = [1..cHANNELS-1]
     it "One less eligible channel if neighbor uses that channel" $ actual `shouldBe` target
     it "Acc impl equals non-acc" $ actual `shouldBe` actual'
@@ -46,7 +46,7 @@ spec = do
   describe "afterstates" $ do
     let setIdx _ = constant (Z :. 3 :. 3 :. 0) :: Exp DIM3
         grid' = permute const mkAGrid setIdx (unit $ A.lift True)
-        chs = eligibleChs (3, 3) grid'
+        chs = eligibleChs (constant (3, 3)) grid'
         -- Get the afterstates of a call arrival
         -- and calculate a (partial) frep for each outcome
         afsB = afterstates grid' (3, 3) NEW chs
@@ -64,10 +64,10 @@ spec = do
     let ch = 0
         setIdx _ = constant (Z :. 3 :. 3 :. ch) :: Exp DIM3
         grid' = permute const grid setIdx (unit $ lift True)
-        cell = (3, 3)
+        cell = constant (3, 3)
         chs = eligibleChs cell grid'
         frep = featureRep grid'
-        afreps = incAfterStateFreps (constant cell) (constant False) chs grid' frep
+        afreps = incAfterStateFreps cell (constant False) chs grid' frep
         rafreps = run bkend afreps
         afreps_sh = arrayShape rafreps
         n_chs = runExp bkend $ A.length chs
@@ -83,7 +83,7 @@ spec = do
         grid' = permute const grid setIdx (unit $ lift True)
         frep' = featureRep grid'
         cell = constant (3, 3)
-        chs = eligibleChs' cell grid'
+        chs = eligibleChs cell grid'
         eIsEnd = constant False
         agent = A.use $ view ssAgent sstate
         -- A3 _idx _qval _afrep

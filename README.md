@@ -67,3 +67,4 @@ stack exec --stack-yaml stack-release.yaml dca-exe -- --help
 ### TODO
 - Implement hand-off look-ahead
 - Fix zero loss issue
+- Graceful quit on CTRL-C
