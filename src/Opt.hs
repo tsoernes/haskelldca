@@ -30,7 +30,7 @@ getOpts = Opt <$>
      <> help "Call duration for new calls") <*>
   option auto
     (long "call_dur_hoff" <> metavar "MINUTES" <> showDefault
-     <> value 3.0
+     <> value 1.0
      <> help "Call duration for handed-off calls") <*>
   option auto
     (long "call_rate" <> metavar "PER_HOUR" <> showDefault
@@ -49,15 +49,15 @@ getOpts = Opt <$>
      <> value 1000
      <> help "How often to show call blocking probability and other run time statistics") <*>
   option auto
-    (long "learning_rate" <> metavar "alphaNet" <> showDefault
+    (long "learning_rate" <> metavar "F" <> showDefault
      <> value 2.52e-6
      <> help "For neural net, i.e. state value update") <*>
   option auto
-    (long "learning_rate_avg" <> metavar "alphaAvg" <> showDefault
+    (long "learning_rate_avg" <> metavar "F" <> showDefault
      <> value 0.06
      <> help "Learning rate for average reward estimate") <*>
   option auto
-    (long "learning_rate_grad" <> metavar "alphaGrad" <> showDefault
+    (long "learning_rate_grad" <> metavar "F"  <> showDefault
      <> value 5e-6
      <> help "Learning rate for gradient corrections") <*>
   switch (long "verify_reuse_constraint") <*>

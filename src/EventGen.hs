@@ -81,7 +81,10 @@ reassign cell fromCh toCh = do
   return ()
 
 generateNewEvent ::
-     (MonadRandom m, MonadReader Opt m, MonadState EventGen m) => Double -> Cell -> m ()
+     (MonadRandom m, MonadReader Opt m, MonadState EventGen m)
+     => Double -- Current time
+     -> Cell -- Event cell
+     -> m ()
 generateNewEvent time cell = do
   lam <- asks callRate
   dt <- sampleRVar (exponential (lam / 60.0))
@@ -93,12 +96,12 @@ generateNewEvent time cell = do
 -- | by an arrival event (HOFF) in a neighboring cell.
 -- | In this context, 'immediately succeeded' means that the two events
 -- | have the same time ('evTime') but the END event is guaranteed to pop first
--- | due to EventKey's Ord class implementation.
+-- | due to EventKey's Ord class instance.
 generateHoffNewEvent ::
      (MonadRandom m, MonadReader Opt m, MonadState EventGen m)
-  => Double -- Time of simultaneous departure from departure cell and arrival at neighbor
-  -> Cell -- Departure cell
-  -> Ch -- Channel to use while in departure cell
+  => Double -- Current time
+  -> Cell -- Event cell (departure cell)
+  -> Ch -- Channel to assign in departure cell
   -> m ()
 generateHoffNewEvent time cell ch = do
   lam <- asks callDurNew
