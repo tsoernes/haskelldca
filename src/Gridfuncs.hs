@@ -167,38 +167,25 @@ incAfterStateFreps cell@(T2 r c) eIsEnd chs grid frep = nInuse ++ nElig
     -- 3: Then do #2, for all actions that are possible in the current state,
     -- without introducing nested data parallelism.
     ---------------------------------------------------------------------------------
-    -- The value of a feature will change by (+1) or (-1) depending on the event and
-    -- feature type, if it changes at all.
+    -- If an action triggers a change in a feature, the value of the feature will change by
+    -- either (+1) or (-1) depending on both the event and feature type.
     diff = cond eIsEnd (-1) 1
-    zgrid = permute const grid fillCell (fill (shape chs) (lift False))
-    grid' = acond eIsEnd zgrid grid
-    fillCell sh = lift (Z :. r :. c :. unindex1 sh)
+    zgrid = permute const grid (index3 r c . unindex1) (fill (shape chs) (lift False))
+    grid' = acond eIsEnd zgrid grid :: Acc Grid
 
-    -- One (frep of an) afterstate for each possible action.
+    -- For each possible action, the feature rep. of the afterstate
     afreps = replicate (lift (Z :. length chs :. All :. All :. All)) frep :: Acc Freps
-    neighs2 = getNeighborhoodAcc' 2 cell (constant True)
+    neighs2 = getNeighborhoodAcc' 2 cell (constant True) :: Acc (Array DIM1 Cell)
     neighs4 = getNeighborhoodAcc' 4 cell (constant False)
 
     -- Compute the inuse features
     nIinit = init afreps
-    nInuse = permute (+) nIinit icomb $ fill (index2 (length chs) (length neighs4)) diff
-    icomb :: Exp DIM2 -> Exp DIM4
-    icomb sh = lift (Z :. ch_i :. r' :. c' :. ch)
+    nInuse = permute (+) nIinit inuseIComb $ fill (index2 (length chs) (length neighs4)) diff
+    inuseIComb :: Exp DIM2 -> Exp DIM4
+    inuseIComb (D2 ch_i neigh_i) = lift (Z :. ch_i :. r' :. c' :. ch)
       where
-        T2 ch_i neigh_i = unindex2 sh
         ch = chs ! index1 ch_i
         T2 r' c' = neighs4 ! index1 neigh_i
-
-    -- Compute the eligibility feature
-    nEinit = drop (lift cHANNELS) afreps -- Remember, we're dropping along 4th dim.
-    nElig = permute (+) nEinit idxComb eligDiff'
-    -- There is 1 entry in 'eligDiff' for each frep in 'afreps';
-    -- or equivalently, for each ch in 'chs'.
-    idxComb :: Exp DIM2 -> Exp DIM4
-    idxComb sh = lift (Z :. ch_i :. r' :. c' :. (0 :: Int))
-      where
-        T2 ch_i neigh_i = unindex2 sh
-        T2 r' c' = neighs2 ! index1 neigh_i
 
     -- Compute the change in eligibility feature
     eligDiff = replicate (lift (Z :. All :. length neighs2)) chs
@@ -214,3 +201,16 @@ incAfterStateFreps cell@(T2 r c) eIsEnd chs grid frep = nInuse ++ nElig
           where
             T2 r'' c'' = _neighs ! index1 acc_idx
             neighBit = grid' ! index3 r'' c'' ch
+
+    -- Compute the eligibility feature by adding the diff to the value of the
+    -- feature at the last time step
+    nEinit = drop (lift cHANNELS) afreps -- Remember, we're dropping along the 4th dim.
+    nElig = permute (+) nEinit eligIComb eligDiff'
+    -- There is 1 entry in 'eligDiff' for each frep in 'afreps';
+    -- or equivalently, for each ch in 'chs'.
+    -- Remember we're populating a an array (nEinit) with feature depth of 1, and
+    -- concatting the feature depths afterwards.
+    eligIComb :: Exp DIM2 -> Exp DIM4
+    eligIComb (D2 ch_i neigh_i) = lift (Z :. ch_i :. r' :. c' :. (0 :: Int))
+      where
+        T2 r' c' = neighs2 ! index1 neigh_i

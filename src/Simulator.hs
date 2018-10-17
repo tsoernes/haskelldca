@@ -157,13 +157,12 @@ getAction cell eIsEnd agent grid frep = res
     -- terminate.
     inuse = inuseChs cell grid
     chs = A.acond eIsEnd inuse elig :: A.Acc Chs
-    A3 _idxSh _qval _nextFrep = selectAction cell eIsEnd chs agent grid frep
-    -- (_idxSh, _qval, _nextFrep) = A.unlift saRes :: (Acc (Scalar DIM1), Acc (Scalar Float), Acc Frep)
+    A3 idxSh _qval nextFrep = selectAction cell eIsEnd chs agent grid frep
     noCh = constant M.Nothing :: Exp (Maybe Ch)
-    someCh = A.lift (M.Just $ chs A.! A.the _idxSh) :: Exp (Maybe Ch)
+    someCh = A.lift (M.Just $ chs A.! A.the idxSh) :: Exp (Maybe Ch)
     res = A.acond (A.null chs)
       (A.lift (A.unit noCh, frep))
-      (A.lift (A.unit someCh, _nextFrep))
+      (A.lift (A.unit someCh, nextFrep))
 
 -- | Find the highest valued ch by running
 -- | the corresponding afterstate feature representations of each ch through

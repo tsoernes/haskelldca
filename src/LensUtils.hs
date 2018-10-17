@@ -15,7 +15,9 @@ statePart :: (MonadState s m) => ALens' s t -> (t -> (a, t)) -> m a
 statePart lenss act = do
   -- Pull out part of state
   t <- gets (^# lenss)
+  -- Execute given function on that part and receive result and next partial state
   let (a, t') = act t
+  -- Update partial state
   modify' (lenss #~ t')
   return a
 
@@ -25,7 +27,7 @@ statePartM :: (MonadState s m) => ALens' s t -> StateT t m a -> m a
 statePartM lenss act = do
   t <- gets (^# lenss)
   (a, t') <- runStateT act t
-  modify' $ lenss #~ t'
+  modify' (lenss #~ t')
   return a
 
 -- | Using a lens, zoom in on a part of the state, apply the state transformer
