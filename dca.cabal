@@ -53,6 +53,7 @@ executable dca-exe
     , random
     , random-fu
     , random-source
+    , transformers
     , mersenne-random-pure64
     , time
     , lens
@@ -102,7 +103,9 @@ test-suite dca-test
       base >=4.7 && <5
     , deepseq
     , hspec
+    , random-source
     , accelerate
+    , transformers
     , accelerate-llvm-native
     , accelerate-blas
     , lens-accelerate
@@ -113,7 +116,6 @@ test-suite dca-test
     , heap
     , random
     , random-fu
-    , random-source
     , mersenne-random-pure64
     , time
     , lens

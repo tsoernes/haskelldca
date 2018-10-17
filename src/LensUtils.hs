@@ -7,7 +7,7 @@ module LensUtils where
 
 import Control.Arrow ( (&&&) )
 import Control.Lens ( Lens', view, (#%~), (#~), (^#), lens, set, ALens' )
-import Control.Monad.State.Lazy ( StateT(runStateT), MonadState, gets, modify' )
+import Control.Monad.State.Strict ( StateT(runStateT), MonadState, gets, modify' )
 
 -- | Using a lens, zoom in on a part of the state, apply the state function
 -- and return the result.

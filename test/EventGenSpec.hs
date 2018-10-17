@@ -12,7 +12,7 @@ import Data.Word ( Word64 )
 import Opt
 import Control.Lens
 import Control.Monad.Reader ( runReader, liftIO  )
-import Control.Monad.State.Lazy ( runState, runStateT, evalStateT, execStateT)
+import Control.Monad.State.Strict ( runState, runStateT, evalStateT, execStateT)
 import Control.Monad (foldM)
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromJust, isJust)

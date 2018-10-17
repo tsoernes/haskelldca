@@ -22,7 +22,7 @@ import Control.Lens
   , use
   , view
   )
-import Control.Monad.State.Lazy
+import Control.Monad.State.Strict
   ( MonadState(state)
   , StateT
   , get

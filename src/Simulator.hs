@@ -10,7 +10,7 @@ import Base
 import Control.Lens
 import Control.Monad (when)
 import Control.Monad.Reader (MonadReader, Reader, asks)
-import Control.Monad.State
+import Control.Monad.State.Strict ( MonadState, runState, forM_ )
 import AccUtils
 import qualified Data.Array.Accelerate as A
 import Data.Array.Accelerate.Control.Lens (_1)

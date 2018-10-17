@@ -20,7 +20,7 @@ import EventGen.Internal
 import Base
 import Control.Lens ( (^.), uses, view, set )
 import Control.Monad.Reader ( MonadReader, asks )
-import Control.Monad.State.Lazy ( MonadState(state), StateT, execStateT, modify' )
+import Control.Monad.State.Strict ( MonadState(state), StateT, execStateT, modify', get )
 import qualified Data.Heap as Heap ( view )
 import qualified Data.Map.Strict as Map ( adjust, (!?), delete, insert )
 import Data.Maybe ( fromJust )

@@ -7,7 +7,8 @@ module EventGen.Internal where
 
 import           Base
 import           Control.Lens ( use, (+=), makeLenses )
-import           Control.Monad.State.Lazy ( StateT, MonadState )
+import           Control.Monad.State.Strict ( MonadState )
+import Control.Monad.Trans.State.Strict (StateT)
 import qualified Data.Heap as Heap ( insert, empty, MinHeap )
 import qualified Data.Map.Strict as Map ( Map, (!), delete, empty, insert )
 import           Data.RVar ( getRandomDouble, getRandomWord64, sampleRVar )
