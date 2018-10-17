@@ -35,6 +35,7 @@ import Data.Array.Accelerate
   , unindex1
   )
 import qualified Data.Array.Accelerate.Data.Maybe as M
+import Data.Maybe as N
 import Data.Maybe (isNothing)
 import Data.RVar (sampleRVar)
 import Data.Random (stdUniform)
@@ -44,6 +45,7 @@ import EventGen
 import Gridfuncs
 import Opt
 import Stats
+import Debug.Trace
 import LensUtils
 
 -- | The state of the simulator any given time. This does not correspond to the
@@ -88,7 +90,7 @@ mkSimState seed = do
 -- | generate the new event(s). 
 environmentStep :: (MonadReader Opt m, MonadState SimState m) => Maybe Ch -> m ()
 environmentStep act = do
-  (Event time eType cell) <- use ssEvent
+  event@(Event time eType cell) <- use ssEvent
   -- Log call events to Stats record
   case eType of
     NEW -> do
@@ -116,8 +118,12 @@ environmentStep act = do
              then statePartM ssEventgen (generateHoffNewEvent time cell ch)
              else statePartM ssEventgen (generateEndEvent time cell ch))
     HOFF -> forM_ act (statePartM ssEventgen . generateHoffEndEvent time cell)
-    END _ _ -> return ()
+    END ch _ -> let fromCh = N.fromJust act -- There should ALWAYS be a ch on END events
+      in when (ch /= fromCh) $ statePartM ssEventgen (reassign cell fromCh ch)
   ssIter += 1
+  nextEvent <- statePartM ssEventgen pop
+  let nextEvent' = trace ("Action|Event:" ++ show act ++ "|" ++ show event) nextEvent
+  ssEvent .= nextEvent
 
 -- | Execute the action on the grid and return the resulting reward.
 gridStep :: Exp Bool -> Exp Cell -> Exp (M.Maybe Ch) -> Acc Grid -> Acc (Scalar Int, Grid)
