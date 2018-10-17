@@ -14,10 +14,13 @@ import Control.Monad.Reader (MonadReader, asks)
 
 -- | Only used internally for testing
 afterstate :: Cell -> Ch -> Bool -> Acc Grid -> Acc Grid
-afterstate (r, c) ch v grid = permute const grid setIdx (unit $ lift v)
-  where
-    setIdx _ = constant (Z :. r :. c :. ch) :: Exp DIM3
+afterstate cell = afterstate' (constant cell)
 
+
+afterstate' :: Exp Cell -> Ch -> Bool -> Acc Grid -> Acc Grid
+afterstate' (T2 r c) ch v grid = permute const grid setIdx (unit $ lift v)
+  where
+    setIdx _ = lift (Z :. r :. c :. ch) :: Exp DIM3
 
 mkGrid :: (MonadReader Opt m) => m Grid
 mkGrid = do
@@ -98,15 +101,13 @@ inuseChs cell grid = indicesOf $ sliceCell cell grid
 
 -- | Return 'True' if the reuse constraint is violated.
 -- | (WHICH SHOULD NEVER HAPPEN; there's a bug in the program)
--- | If a channel is in use at a focal cell and any of
--- | neighbors withing distance of 2, then the reuse constraint is violated.
+-- | If a channel is in use at a focal cell simultaneously as any of its
+-- | neighbors within a distance of 2, then the reuse constraint is violated.
 violatesReuseConstraint :: Acc Grid -> Exp Bool
 violatesReuseConstraint grid = (the . or . flatten) violatesPerCh
   where
-    -- C0 C0N0 C0N1 C0N2 .. C0Nx C1N0 C1N1 .. C1Ny ..
-    -- 'allNeighs' should be thought of as a vector of grid cells.
-    allNeighs = transpose $ sliceNeighs _neighs grid :: Acc (Array DIM2 Bool)
-    alternates = fold1Seg (||) allNeighs _segs :: Acc (Array DIM2 Bool)
+    allNeighs = transpose $ sliceNeighs _neighs2 grid :: Acc (Array DIM2 Bool)
+    alternates = fold1Seg (||) allNeighs _segs2 :: Acc (Array DIM2 Bool)
     twoSegs = fill (index1 . lift $ rOWS * cOLS) 2 :: Acc (Array DIM1 Int)
     violatesPerChPerCell = fold1Seg (&&) alternates twoSegs
     violatesPerCh = fold1 (||) violatesPerChPerCell

@@ -40,8 +40,19 @@ spec = do
         actual = toList $ run bkend $ eligibleChs cell grid'
         actual' = toList $ run bkend $ eligibleChs cell grid'
         target = [1..cHANNELS-1]
-    it "One less eligible channel if neighbor uses that channel" $ actual `shouldBe` target
-    it "Acc impl equals non-acc" $ actual `shouldBe` actual'
+      in do it "One less eligible channel if neighbor uses that channel" $ actual `shouldBe` target
+            it "Acc impl equals non-acc" $ actual `shouldBe` actual'
+
+    let cell1 = constant (0, 1)
+        cell2 = constant (5, 0)
+        grid3b = afterstate' cell1 69 True grid
+        grid3b' = afterstate' cell2 69 True grid3b
+        elig1A = eligibleChs cell1 grid3b'
+        (nElig1, elig1_) = runExpAcc bkend (size elig1A) elig1A
+        elig1 = toList elig1_
+        elig2 = toList $ run bkend $ eligibleChs cell2 grid3b'
+      in do it "Same eligible channels" $ elig1 `shouldBe` elig2
+            it "Should have 69 eligible channels" $ nElig1 `shouldBe` (cHANNELS - 1)
 
   describe "afterstates" $ do
     let setIdx _ = constant (Z :. 3 :. 3 :. 0) :: Exp DIM3
@@ -98,34 +109,40 @@ spec = do
 
   describe "violatesReuseConstraint " $ do
     let res1 = runExp bkend $ violatesReuseConstraint grid
-    it "can run w/o crashing due to nested data parallelism" $
-      res1 `shouldBe` False
+      in it "can run w/o crashing due to nested data parallelism" $
+         res1 `shouldBe` False
 
     let grid2 = afterstate (3, 3) 3 True grid
         res2 = runExp bkend $ violatesReuseConstraint grid2
-    it "1 channel in use at whole grid does not violate" $
-      res2 `shouldBe` False
+     in it "1 channel in use at whole grid does not violate" $
+        res2 `shouldBe` False
 
     let grid3 = afterstate (3, 3) 3 True grid
         grid3' = afterstate (3, 3) 4 True grid3
         res3 = runExp bkend $ violatesReuseConstraint grid3'
-    it "2 adjacent channels in same cell does not violate" $
-      res3 `shouldBe` False
+      in it "2 adjacent channels in same cell does not violate" $
+         res3 `shouldBe` False
 
     let grid4 = afterstate (3, 3) 3 True grid
         grid4' = afterstate (3, 4) 3 True grid4
         res4 = runExp bkend $ violatesReuseConstraint grid4'
-    it "Same channel neighboring cells (d=1) does violate" $
-      res4 `shouldBe` True
+      in it "Same channel neighboring cells (d=1) does violate" $
+         res4 `shouldBe` True
 
     let grid5 = afterstate (3, 3) 3 True grid
         grid5' = afterstate (3, 5) 3 True grid5
         res5 = runExp bkend $ violatesReuseConstraint grid5'
-    it "Same channel neighboring cells (d=2) does violate" $
-      res5 `shouldBe` True
+      in it "Same channel neighboring cells (d=2) does violate" $
+         res5 `shouldBe` True
 
     let grid6 = afterstate (3, 3) 3 True grid
         grid6' = afterstate (3, 6) 3 True grid6
         res6 = runExp bkend $ violatesReuseConstraint grid6'
-    it "Same channel neighboring cells (d=3) does not violate" $
-      res6 `shouldBe` False
+      in it "Same channel neighboring cells (d=3) does not violate" $
+         res6 `shouldBe` False
+
+    let grid3b = afterstate (0, 1) 69 True grid
+        grid3b' = afterstate (5, 0) 69 True grid3b
+        res3b = runExp bkend $ violatesReuseConstraint grid3b'
+      in it "Same channel in far away cells does not violate" $
+         res3b `shouldBe` False

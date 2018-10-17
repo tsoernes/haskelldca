@@ -11,8 +11,13 @@ _neighs :: Acc (Array DIM1 Cell)
 _nNeighs :: Acc (Array DIM3 Int)
 (_neighs, _nNeighs) = generateNeighsAcc
 
-_segs :: Acc (Array DIM1 Int)
-_segs = generateSegs
+_segs2 :: Acc (Array DIM1 Int)
+_segs2 = generateSegs 2
+
+_segs4 :: Acc (Array DIM1 Int)
+_segs4 = generateSegs 4
+
+_neighs2 = generateNeighs2Acc
 
 -- Return a vector of indices of cells at distance 'd' or less from the given cell.
 -- The boolean parameter determines if the given cell itself is included in the list.
@@ -45,10 +50,10 @@ getNeighborhoodOffsets' d (T2 r c) includeself = A.lift (start', n')
 -- Returns a vector V of cells and a 3D-array M of integers.
 -- M is of shape RxCx5 where R and C are the number of
 -- rows and columns in the grid and thus has
--- a vector (henceforth M[r, c]) of length 5 for each cell (r, c) in grid.
+-- a vector (henceforth M[r, c]) of length 5 for each cell in grid.
 -- For a given cell (r, c), the vector M[r, c] contains 5 integer
--- entries that can be used to look up any
--- d-distance neighborhood for the given cell for d in the inclusive range of [1..4].
+-- entries that can be used to look up any d-distance neighborhood for the
+-- given cell for d in the inclusive range of [1..4].
 -- The definition of a d-distance neighborhood is given in the documentation of
 -- the `getNeighboorhood` function which can later be used to perform
 -- the retrieval of said neighborhoods.
@@ -69,18 +74,33 @@ generateNeighsAcc = (neighsArr, nNeighsArr)
     (neighsLi, nNeighsLi, n) = foldl inner ([], [], 0) gridIdxs
     inner (neighs', nNeighs', n') idx = (neighs' ++ cellNeighs, nNeighs'', n'')
       where
-        (cellNeighs, cellNNeighs) = neighborhood idx
+        (cellNeighs, cellNNeighs) = neighborhood 4 idx
         n'' = n' + length cellNeighs
         nNeighs'' = nNeighs' ++ n' : cellNNeighs
 
--- | Only used to verify reuse constraint
-generateSegs :: Acc (Array DIM1 Int)
-generateSegs = segs
+generateNeighs2Acc :: Acc (Array DIM1 Cell)
+generateNeighs2Acc = neighsArr
   where
-    neigh_segs = flatten $ slice _nNeighs (constant (Z :. All :. All :. (2::Int)))
-    neigh_segs' = A.map (\s -> s - 1) neigh_segs
+    neighsArr = A.use $ A.fromList (Z :. length neighsLi) neighsLi
+    neighsLi = foldl inner [] gridIdxs
+    inner neighs' idx = neighs' ++ cellNeighs
+      where
+        (cellNeighs, _) = neighborhood 2 idx
+
+
+-- | A vector [1, n1, 1, n2, 1, n3, 1, n4, ..., 1, nK],
+-- | where 'nk' is the size of the d-distance neighborhood (not including self)
+-- | for cell number 'k' counting in linear row-major order
+-- | (that is such that 'K' equals 'rOWS*cHANNELS').
+generateSegs :: Int -> Acc (Array DIM1 Int)
+generateSegs d = segs
+  where
+    neigh_segs = flatten $ slice _nNeighs (constant (Z :. All :. All :. (d::Int)))
+    neigh_segs' = A.map (\s -> s - 1) neigh_segs -- Don't count self
+    -- Intersperse segments of length 1 at every even index starting at 0
     focal_segs = fill (lift (Z :. 2 * A.length neigh_segs)) (constant 1)
     segs = scatter (enumFromStepN (index1 $ A.length neigh_segs) 1 2) focal_segs neigh_segs'
+
 
 getNeighs :: Int -> Cell -> Bool -> [Cell]
 getNeighs d (r, c) includeself =
@@ -90,10 +110,11 @@ getNeighs d (r, c) includeself =
   where
     neighs = concat [periphery d' (r, c) | d' <- [1 .. d]]
 
-neighborhood :: Cell -> ([Cell], [Int])
-neighborhood (r, c) = (neighs, nNeighs)
+-- For d >= 1
+neighborhood :: Int -> Cell -> ([Cell], [Int])
+neighborhood dHi (r, c) = (neighs, nNeighs)
   where
-    neighsO = [periphery d (r, c) | d <- [1 .. 4]]
+    neighsO = [periphery d (r, c) | d <- [1 .. dHi]]
     neighs = (r, c) : concat neighsO
     nNeighs = tail $ scanl (+) 1 $ map length neighsO
 
