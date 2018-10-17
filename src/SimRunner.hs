@@ -15,6 +15,7 @@ import           Control.Monad.State
       StateT(runStateT),
       MonadState,
       evalState,
+      when
       )
 import Data.Array.Accelerate (Acc, Scalar, the)
 import qualified Data.Array.Accelerate as A
@@ -27,7 +28,7 @@ import           Prelude as P
 import           Simulator
 import           Stats
 import           Text.Printf ( printf )
-import           Debug.Trace ( trace )
+-- import           Debug.Trace ( trace )
 
 
 -- | The inner loop which executes a single step in the simulator. First,
@@ -89,7 +90,7 @@ runAcc alphaN alphaA alphaG eIsEnd eCell mbCh frep nextFrep grid agent = A.lift 
     reward' = the $ A.map A.fromIntegral reward
     A2 loss agent' = backward (the alphaN) (the alphaA) (the alphaG) frep nextFrep reward' agent
 
-data SimStop = Success | Paused | NaNLoss | ZeroLoss Float | ReuseConstraintViolated | UserQuit deriving (Show)
+data SimStop = Success | Paused | NaNLoss | ZeroLoss Float | ReuseConstraintViolated | UserQuit deriving (Show, Eq)
 
 untilJust :: (Monad m) => m (a, Maybe b) -> m ([a], b)
 untilJust f = go
@@ -162,22 +163,32 @@ runSim seed opts = do
       accFn2 = runN bkend runAcc
   -- Execute 'nEvents' in the simulator.
   -- TODO graceful quit on CTRL-C
-  -- TODO graceful quit on NaN loss
   startTime <- getCurrentTime
   let sState = runReader (mkSimState seed) opts
       runLogIterWrapper' = runLogIterWrapper $ runLogIter $ runStep accFn1 accFn2
       fn = runLogIterWrapper' opts
    -- Run the simulation until a 'simstop' occurs
-  (sState', _simstop) <- loopM fn sState
+  (sState', simstop) <- loopM fn sState
+  when (simstop == ReuseConstraintViolated) $ do
+    let inuse = runN bkend $ indicesOf3 $ A.use (sState'^.ssGrid)
+    print $ "Channels in use:\n" ++ show inuse
   -- Print the final 'statistics' report
   let nCallsInProgress = runExp bkend $ boolSum (A.use (sState'^.ssGrid))
       i = view ssIter sState'
   putStrLn $ evalState (statsReportEnd nCallsInProgress i) (sState'^.ssStats)
   -- Print simulation duration and speed (in wall-clock time)
-  endTime <- getCurrentTime
-  let dt = diffUTCTime endTime startTime :: NominalDiffTime
-      rate = fromRational $ fromIntegral i / toRational dt :: Double
-  -- Duration/speed calc includes building the graphs
-  -- (the 2 runN's; hopefully only 1 time ..)
-  putStrLn $
-    printf "\nSimulation duration: %s.\nProcessed %d events at %.0f events/second." (show dt) i rate
+  endTime <- getCurrentTime -- in seconds
+  let dt_sec_double = fromRational $ toRational $ diffUTCTime endTime startTime :: Double
+      dt_sec = floor dt_sec_double :: Int
+      dt_min = floor (dt_sec_double / 60.0) :: Int
+      dt_rem_sec = dt_sec - dt_min * 60 :: Int
+      rate = fromIntegral i / dt_sec_double :: Double
+      last_etime = sState' ^. ssEvent . evTime :: Double -- in minutes
+      sim_dt_min = floor last_etime :: Int
+      sim_dt_rem_sec = floor ((last_etime - fromIntegral sim_dt_min) * 60.0) :: Int
+  putStrLn $ printf
+    "\nSimulation duration: (%f)=%dm%ds in sim time, %dm%ds wall clock, %d events at %.0f events/second"
+    last_etime
+    sim_dt_min sim_dt_rem_sec
+    dt_min dt_rem_sec
+    i rate

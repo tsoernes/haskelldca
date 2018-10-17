@@ -55,18 +55,6 @@ sliceNeighs neighs grid = allNeighs
         T2 r c = neighs ! index1 i
 
 
--- | One-hot array of eligible channels
--- | Convert a one-hot vector (sparse repr) to a vector of indecies (dense repr)
-indicesOf :: Acc (Array DIM1 Bool) -> Acc (Array DIM1 Int)
-indicesOf arr = iHot
-  where
-    seArr = indexed arr :: Acc (Array DIM1 (DIM1, Bool))
-    -- Filter out (index, elem) pairs where elem is not True,
-    -- and keep only the indices (as ints)
-    shHot = afst $ filter snd seArr
-    iHot = map (unindex1 . fst) shHot :: Acc (Array DIM1 Int)
-
-
 -- | One-hot map of channels in use at cell neighbors with distance of 2 or less
 inuseNeighsMap :: Exp Cell -> Acc Grid -> Acc GridCell
 inuseNeighsMap cell grid = fold1 (||) (transpose allNeighs)

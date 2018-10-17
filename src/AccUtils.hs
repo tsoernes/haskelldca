@@ -140,3 +140,21 @@ argpmax1 = first unindex1 . argpmax
 -- Perhaps use accelerate BLAS bindings instead?
 vvMul :: Num a => Acc (Vector a) -> Acc (Vector a) -> Acc (Scalar a)
 vvMul xs ys = fold (+) 0 (zipWith (*) xs ys)
+
+-- | One-hot array of eligible channels
+-- | Convert a one-hot vector (sparse repr) to a vector of indecies (dense repr)
+indicesOf :: Acc (Array DIM1 Bool) -> Acc (Array DIM1 Int)
+indicesOf arr = iHot
+  where
+    seArr = indexed arr :: Acc (Array DIM1 (DIM1, Bool))
+    -- Filter out (index, elem) pairs where elem is not True,
+    -- and keep only the indices (as ints)
+    shHot = afst $ filter snd seArr
+    iHot = map (unindex1 . fst) shHot :: Acc (Array DIM1 Int)
+
+indicesOf3 :: Acc (Array DIM3 Bool) -> Acc (Array DIM1 DIM3)
+indicesOf3 arr = iHot
+  where
+    seArr = indexed arr :: Acc (Array DIM3 (DIM3, Bool))
+    shHot = afst $ filter snd seArr :: Acc (Array DIM1 (DIM3, Bool))
+    iHot = map fst shHot :: Acc (Array DIM1 DIM3)
