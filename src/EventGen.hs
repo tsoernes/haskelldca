@@ -37,21 +37,11 @@ import Opt ( Opt(callDurHoff, callDurNew, callRate) )
 -- | Throws an error if the queue is empty.
 pop :: (MonadState EventGen m) => m Event
 pop = do
-  -- queueIsNull <- uses egQueue null
-  -- Pass queue through trace OP
-  -- let q = trace ("Queue is empty before pop: " ++ show queueIsNull) queue
   eKey <- statePart egQueue $ fromJust . Heap.view
   -- ^ Pop an identifier from the heap and retrieve the corresponding event
   -- from the hashmap. Then delete the it from the hashmaps.
   let eId = ekId eKey
   event <- fromJust <$> uses egEvents (Map.!? eId)
-  -- Pass event through trace OP
-  -- let event' =
-  --       fromJust $
-  --       trace
-  --         ("Event in map is nothing (before fromJust): " ++
-  --          show (isNothing event'))
-  --         event
   modifyPart egEvents $ Map.delete eId
   case event ^. evType of
     END ch _ -> modifyPart egEndIds (Map.delete (view evCell event, ch))
@@ -77,7 +67,7 @@ reassign cell fromCh toCh = do
       return eId
   -- Change the 'toCh' field of the 'eId' event in the event-hashmap to
   -- reflect the channel reassignment
-  modifyPart egEvents $ Map.adjust (\ev -> set evType (END toCh (hoffCell $ view evType ev)) ev) eId
+  modifyPart egEvents $ Map.adjust (\evs -> set evType (END toCh (hoffCell $ view evType evs)) evs) eId
   return ()
 
 generateNewEvent ::
@@ -86,9 +76,11 @@ generateNewEvent ::
      -> Cell -- Event cell
      -> m ()
 generateNewEvent time cell = do
-  lam <- asks callRate
-  dt <- sampleRVar (exponential (lam / 60.0))
-  _ <- push $ Event (time + dt) NEW cell
+  lam <- asks callRate -- in calls per hour
+  let lam' = 1 / (lam / 60.0)
+  dt <- sampleRVar (exponential lam')
+  let t = time + dt
+  _ <- push $ Event t NEW cell
   return ()
 
 -- | Hand off a call to another cell. A hand-off consists of two call events:
@@ -105,7 +97,7 @@ generateHoffNewEvent ::
   -> m ()
 generateHoffNewEvent time cell ch = do
   lam <- asks callDurNew
-  dt <- sampleRVar (exponential (1.0 / lam :: Double))
+  dt <- sampleRVar (exponential (lam :: Double))
   let neighs = getNeighs 2 cell False
   neigh_i <- sampleRVar $ uniform 0 (length neighs - 1)
   let toCell = neighs !! neigh_i
