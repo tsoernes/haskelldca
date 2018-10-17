@@ -87,7 +87,7 @@ mkSimState seed = do
   return $ SimState g f event eg' mkStats ag 0
 
 -- | Advance the environment 1 step: Log statistics for the event and its corresponding action;
--- | generate the new event(s). 
+-- | generate the new event(s).
 environmentStep :: (MonadReader Opt m, MonadState SimState m) => Maybe Ch -> m ()
 environmentStep act = do
   event@(Event time eType cell) <- use ssEvent
@@ -133,7 +133,7 @@ gridStep eIsEnd eCell act grid = tup
   grid' = A.acond (M.isNothing act)
     grid
     (executeAction eIsEnd eCell (M.fromJust act) grid)
-  reward = boolSum grid
+  reward = boolSum grid'
   tup = A.lift (A.unit reward, grid')
 
 -- | Given current grid conditions and an event, select a channel.
