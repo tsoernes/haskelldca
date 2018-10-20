@@ -63,15 +63,15 @@ getOpts = Opt <$>
   switch (long "verify_reuse_constraint") <*>
   option bkendOpt
     (long "backend" <> showDefault
-     <> value Interpreter
+     <> value CPU
      <> help bkendOptStr)  <*>
   option auto
     (long "min_loss" <> metavar "F"  <> showDefault
-     <> value 1e-5
+     <> value 0
      <> help "Abort simulation if loss goes below given absolute value. Set to 0 to disable.")
 
 bkendOptStr :: String
-bkendOptStr = "Accepted backends are 'interp' for 'Interpreter' and 'cpu' for 'LLVM.Native'."
+bkendOptStr = "Accepted backends are 'interp' for 'Interpreter' and 'cpu' for 'LLVM.Native'. The interpreter yields better error messages."
 
 bkendOpt :: ReadM Backend
 bkendOpt = str >>= \s -> case map toLower s of
