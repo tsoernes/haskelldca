@@ -131,19 +131,6 @@ periphery d (rFoc, cFoc) =
       ps6 = take d . iterate (\(r, c) -> (r - 1, c + 1)) $ (rFoc, cFoc - d)
    in filter isValid (ps6 ++ ps5 ++ ps4 ++ ps3 ++ ps2 ++ ps1)
 
--- Return the set of d-distance neighbors for the given cell
-periphery' :: Int -> Cell -> [Cell]
-periphery' d (r, c)
-  -- The set of d-distance neighbors form a hexagon shape. Traverse each of
-  -- the sides of this hexagon and gather up the cell indices.
- =
-  let ps1 = zip (repeat (r - d)) [c,c + 1 .. c + d - 1]
-      ps2 = zip [r - d,r - d + 1 .. r] (repeat (c + d))
-      ps3 = zip [r,r + 1 .. r + d - 1] [c + d,c + d - 1 .. c + 1]
-      ps4 = zip (repeat (r + d)) [c,c - 1 .. c - d + 1]
-      ps5 = zip [r + d,r + d - 1 .. r + 1] (repeat (c - d))
-      ps6 = zip [r,r - 1 .. r - d] [c - d,c - d + 1 .. c - 1]
-   in filter isValid (ps6 ++ ps5 ++ ps4 ++ ps3 ++ ps2 ++ ps1)
 
 isValid :: Cell -> Bool
 isValid (r, c)

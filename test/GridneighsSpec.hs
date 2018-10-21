@@ -52,14 +52,7 @@ import Opt
 spec :: Spec
 spec = do
   let be = backend popts
-  describe "periphery" $ do
-    let p1 d cell = Data.Set.fromList $ periphery d cell
-        p2 d cell = Data.Set.fromList $ periphery' d cell
-    for_ [1 .. 4] $ \d ->
-      for_ gridIdxs $ \cell ->
-        it ("implementations are equal for distance " ++ show d ++ " at cell " ++ show cell) $
-        p1 d cell `shouldBe` p2 d cell
-  
+
   describe "neighborhood-wwo-self" $
     forM_ [1 .. 4] $ \d ->
       forM_ gridIdxs $ \cell' -> do

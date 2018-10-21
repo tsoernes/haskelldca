@@ -7,7 +7,7 @@ import Criterion.Main
 
 main = defaultMain [
   bgroup "periphery" [ bench "A"  $ nf (map (uncurry periphery)) inp
-                     , bench "B"  $ nf (map (uncurry periphery')) inp
+                     , bench "B"  $ nf (map (uncurry periphery)) inp
                      ]
   ]
   where
