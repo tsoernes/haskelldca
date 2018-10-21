@@ -63,7 +63,7 @@ getOpts = Opt <$>
   switch (long "verify_reuse_constraint") <*>
   option bkendOpt
     (long "backend" <> showDefault
-     <> value CPU
+     <> value Interpreter
      <> help bkendOptStr)  <*>
   option auto
     (long "min_loss" <> metavar "F"  <> showDefault

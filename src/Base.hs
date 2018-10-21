@@ -2,16 +2,30 @@
 
 module Base where
 
-import Control.Arrow ( (***) )
-import Control.Lens ( makeLenses )
-import Data.Array.Accelerate ( fill, Scalar, constant, (:.)((:.)), Array, DIM1, DIM3, DIM4, Z(Z), Acc, Exp, Lift(lift) )
+import Control.Lens (makeLenses)
+import Data.Array.Accelerate
+  ( (:.)((:.))
+  , Acc
+  , Array
+  , DIM1
+  , DIM3
+  , DIM4
+  , Exp
+  , Lift(lift)
+  , Scalar
+  , Z(Z)
+  , constant
+  , fill
+  )
 import qualified Data.Array.Accelerate as A
 import Prelude as P
 
 -- Grid dimensions and (system-wide) bandwidth.
 rOWS, cOLS, cHANNELS :: Int
 rOWS = 7
+
 cOLS = 7
+
 cHANNELS = 70
 
 gridIdxs :: [Cell]
@@ -53,7 +67,8 @@ type Cell = (Int, Int)
 data EType
   = NEW
   -- ^ A regular call service request. The caller will want to be assigned a channel to use.
-  | END Ch (Maybe Cell)
+  | END Ch
+        (Maybe Cell)
   -- ^ END events happen when a channel currently in use in the cell of the caller will be freed.
   -- This occurs when the caller terminates the call, or the caller chooses to move
   -- to a neighboring cell (a hand-off).
@@ -94,11 +109,11 @@ makeLenses ''Event
 -- All arrays and scalars that form a part of the state and that should be run with Accelerate
 -- are put in tuple aliases. Allows for "Acc SomeState -> Acc SomeState" expressions w/o
 -- deriving "instance Arrays SomeState".
-
 -- (wNet, wGradCorr, avgReward)
-type Agent = ( Array DIM1 Float, Array DIM1 Float, Scalar Float )
+type Agent = (Array DIM1 Float, Array DIM1 Float, Scalar Float)
+
 -- Useful for unlifting the type above into its parts
-type AccAgent = ( Acc (Array DIM1 Float), Acc (Array DIM1 Float), Acc (Scalar Float) )
+type AccAgent = (Acc (Array DIM1 Float), Acc (Array DIM1 Float), Acc (Scalar Float))
 
 agWNet :: Agent -> Array DIM1 Float
 agWNet (n, _, _) = n
@@ -108,17 +123,6 @@ agWGradCorr (_, g, _) = g
 
 agAvgReward :: Agent -> Scalar Float
 agAvgReward (_, _, a) = a
-
-
--- (grid, frep)
--- type GridState = ( Grid, Frep )
-
--- gsGrid :: GridState -> Grid
--- gsGrid (g, _) = g
-
--- gsFrep :: GridState -> Frep
--- gsFrep (_, f) = f
-
 
 data Backend
   = Interpreter

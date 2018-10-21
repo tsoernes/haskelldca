@@ -4,11 +4,13 @@
 
 module Stats where
 
+import Base
 import Control.Lens
 import Control.Monad.Reader (MonadReader, asks)
 import Control.Monad.State (MonadState, gets)
 import Opt
 import Text.Printf (printf)
+import AccUtils
 
 data Stats = Stats
     -- Number of call arrivals this log_iter period (not including hand-offs)
@@ -89,11 +91,12 @@ statsCumus stats = (cumuNew, cumuHoff, cumuTot)
     cumuHoff = rejHoff / (arrHoff + 1.0)
     cumuTot = (rejNew + rejHoff) / (arrNew + arrHoff + 1.0)
 
-statsReportLogIter :: (MonadReader Opt m, MonadState Stats m)
+statsReportPeriod :: (MonadReader Opt m, MonadState Stats m)
   => Int -- Iteration when this function is called
   -> [Float] -- Losses during last period
+  -> Float -- Average reward at end of period
   -> m String
-statsReportLogIter i losses = do
+statsReportPeriod i losses avgReward = do
   (cumuNew, cumuHoff, cumuTot) <- gets statsCumus
   nRej <- use nCurrRejectedNew
   nArr <- use nCurrArrivalsNew
@@ -103,12 +106,13 @@ statsReportLogIter i losses = do
       logIterBpNew = fromIntegral nRej / fromIntegral (nArr + 1) :: Double
       str =
         printf
-          "Blocking probability events %d-%d: %.4f, cumulative %.4f, avg. loss: %.4f"
-          (i - li)
+          "Blocking probability events %d-%d: %.4f, cumulative %.4f, avg. loss: %.1f, avg. reward %.4f"
+          (min (i - li) 0)
           i
           logIterBpNew
           cumuNew
           avgLoss
+          avgReward
 
   nCurrArrivalsNew .= 0
   nCurrRejectedNew .= 0

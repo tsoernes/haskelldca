@@ -17,10 +17,12 @@ executable dca-exe
   hs-source-dirs:      src
   main-is:             Main.hs
   default-language:    Haskell2010
-  other-modules:       
+  ghc-options: -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin
+  other-modules:
       Base
     , Gridfuncs
     , Gridneighs
+    , Gridconsts
     , Opt
     , Stats
     , EventGen
@@ -32,16 +34,16 @@ executable dca-exe
     , Agent
     , Scratch
     , TestBase
+    , ExGrids
   hs-source-dirs:
       test
       src
-  build-depends:       
+  build-depends:
       base >= 4.7 && < 5
     , hspec
     , deepseq
     , accelerate
     , accelerate-llvm-native
-    , accelerate-blas
     , lens-accelerate
     , extra
     , containers
@@ -60,14 +62,14 @@ executable dca-exe
 
 benchmark dca-bench
   type: exitcode-stdio-1.0
-  main-is: BenchGridneighs.hs 
+  main-is: BenchGridneighs.hs
   other-modules:
       Gridneighs
     , Base
   hs-source-dirs:
       bench
       src
-  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N -main-is BenchGridneighs
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin -main-is BenchGridneighs
   build-depends:
       base >=4.7 && <5
     , accelerate
@@ -76,7 +78,7 @@ benchmark dca-bench
 
 test-suite dca-test
   type: exitcode-stdio-1.0
-  main-is: Spec.hs 
+  main-is: Spec.hs
   other-modules:
       Agent
     , TestBase
@@ -84,8 +86,10 @@ test-suite dca-test
     , Gridneighs
     , GridneighsSpec
     , Gridfuncs
+    , Gridconsts
+    , ExGrids
     , GridfuncsSpec
-    , LensUtils 
+    , LensUtils
     , LensUtilsSpec
     , AccUtils
     , EventGen.Internal
@@ -98,7 +102,7 @@ test-suite dca-test
   hs-source-dirs:
       test
       src
-  ghc-options: -O -threaded -rtsopts -with-rtsopts=-N
+  ghc-options: -O -threaded -rtsopts -with-rtsopts=-N -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin
   build-depends:
       base >=4.7 && <5
     , deepseq

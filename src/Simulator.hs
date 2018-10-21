@@ -16,6 +16,8 @@ import qualified Data.Array.Accelerate as A
 import Data.Array.Accelerate.Control.Lens (_1)
 import Data.Array.Accelerate
   ( (:.)(..)
+  , boolToInt
+  , map
   , (:.)(..)
   , Acc
   , Scalar
@@ -62,6 +64,12 @@ data SimState = SimState
   , _ssStats :: Stats
   , _ssAgent :: Agent
   , _ssIter :: Int -- Number of executed iterations
+
+  -- FOR DEBUGGING: previous values of variables above
+  , _ssPGrid :: Grid
+  , _ssPFrep :: Frep --
+  , _ssPEvent :: Event
+  , _ssPAgent :: Agent
   }
 
 makeLenses ''SimState
@@ -69,10 +77,12 @@ makeLenses ''SimState
 mkAgent :: (MonadReader Opt m) => m Agent
 mkAgent = do
   bend <- asks backend
-  let mk = fill (constant (Z :. rOWS * cOLS * (cHANNELS + 1))) 0.0
-      w = run bend mk
-      avgr = A.fromList Z [0.0] :: Scalar Float
-  return (w, w, avgr)
+  let mk1 = fill (constant (Z :. rOWS * cOLS * (cHANNELS + 1))) 0.0
+      mk2 = fill (constant (Z :. rOWS * cOLS * (cHANNELS + 1))) 0.0
+      w1 = run bend mk1
+      w2 = run bend mk2
+      avgr = scalar 0.0 :: Scalar Float
+  return (w1, w2, avgr)
 
 -- | Given random seed, construct initial simulator state
 mkSimState :: Word64 -> Reader Opt SimState
@@ -84,7 +94,7 @@ mkSimState seed = do
   -- Retrieve the first event that needs to be handled
   let (event, eg') = runState pop eg :: (Event, EventGen)
       f = run bend $ featureRep $ A.use g
-  return $ SimState g f event eg' mkStats ag 0
+  return $ SimState g f event eg' mkStats ag 0 g f event ag
 
 -- | Advance the environment 1 step: Log statistics for the event and its corresponding action;
 -- | generate the new event(s).
@@ -102,14 +112,12 @@ environmentStep act = do
       statePartM ssStats statsEventArrivalHoff
       when (isNothing act) $ statePartM ssStats statsEventRejectNew
     END _ _ -> statePartM ssStats statsEventEnd
-  -- Generate further call events
+
+  -- Generate further call events in the EventGen
   case eType of
     NEW -> do
       statePartM ssEventgen (generateNewEvent time cell)
-      forM_
-        act
-        (\ch
-          -> do
+      forM_ act (\ch -> do
            p <- statePartM (ssEventgen . egGen) (sampleRVar stdUniform)
            -- With probability ph, schedule a hand off to a
            -- nearby cell instead of a regular call termination
@@ -118,23 +126,22 @@ environmentStep act = do
              then statePartM ssEventgen (generateHoffNewEvent time cell ch)
              else statePartM ssEventgen (generateEndEvent time cell ch))
     HOFF -> forM_ act (statePartM ssEventgen . generateHoffEndEvent time cell)
-    END ch _ -> let fromCh = N.fromJust act -- There should ALWAYS be a ch on END events
-      in when (ch /= fromCh) $ statePartM ssEventgen (reassign cell fromCh ch)
+    END toCh _ -> let fromCh = N.fromJust act -- There should ALWAYS be a ch on END events
+      in when (toCh /= fromCh) $ statePartM ssEventgen (reassign cell fromCh toCh)
   ssIter += 1
   nextEvent <- statePartM ssEventgen pop
   let nextEvent' = trace ("Action|Event:" ++ show act ++ "|" ++ show event) nextEvent
-  ssEvent .= nextEvent
+  ssEvent .= nextEvent'
 
 -- | Execute the action on the grid and return the resulting reward.
 gridStep :: Exp Bool -> Exp Cell -> Exp (M.Maybe Ch) -> Acc Grid -> Acc (Scalar Int, Grid)
-gridStep eIsEnd eCell act grid = tup
+gridStep eIsEnd eCell act grid = A.lift (reward, nextGrid)
   where
   -- Execute action, if any, on the grid and return resulting call count as reward
-  grid' = A.acond (M.isNothing act)
+  nextGrid = A.acond (M.isNothing act)
     grid
     (executeAction eIsEnd eCell (M.fromJust act) grid)
-  reward = boolSum grid'
-  tup = A.lift (A.unit reward, grid')
+  reward = A.unit $ boolSum nextGrid
 
 -- | Given current grid conditions and an event, select a channel.
 -- | The channel in conjunction with the event specify an action.
@@ -144,11 +151,10 @@ gridStep eIsEnd eCell act grid = tup
 -- | to reassign to the channel of the terminating call.
 -- | In addition, the frep of the afterstate corresponding to the channel is returned
 -- | to avoid recomputing it when the action is later executed.
-getAction' :: Acc (Scalar Cell) -> Acc (Scalar Bool) -> Acc Agent -> Acc Grid -> Acc Frep -> Acc (Array DIM0 (Maybe Ch), Frep)
-getAction' (A0 cell) (A0 eIsEnd) = getAction cell eIsEnd
-
-getAction :: Exp Cell -> Exp Bool -> Acc Agent -> Acc Grid -> Acc Frep -> Acc (Array DIM0 (Maybe Ch), Frep)
-getAction cell eIsEnd agent grid frep = res
+getAction ::
+  Acc (Scalar Cell) -> Acc (Scalar Bool) -> Acc Agent -> Acc Grid -> Acc Frep ->
+  Acc (Array DIM0 (Maybe Ch), Frep)
+getAction (A0 cell) (A0 eIsEnd) agent grid frep = res
   where
     -- For NEW/HOFF events, the action space consists of the channels
     -- that are eligible in 'cell'.
@@ -160,38 +166,40 @@ getAction cell eIsEnd agent grid frep = res
     A3 idxSh _qval nextFrep = selectAction cell eIsEnd chs agent grid frep
     noCh = constant M.Nothing :: Exp (Maybe Ch)
     someCh = A.lift (M.Just $ chs A.! A.the idxSh) :: Exp (Maybe Ch)
+    -- No action implies no change in grid nor frep
     res = A.acond (A.null chs)
       (A.lift (A.unit noCh, frep))
       (A.lift (A.unit someCh, nextFrep))
 
--- | Find the highest valued ch by running
+
+-- | Find the highest valued (index of) ch by running
 -- | the corresponding afterstate feature representations of each ch through
 -- | the function approximator (i.e. the neural network).
 -- | In other words, all possible futures at the next step are given
 -- | a desirability measure and we select the action leading to the most desirable
 -- | state next time-step. This approach is only possible in domains
 -- | where the value of the next state is deterministic (or we know the distribution)
--- | given an action; otherwise you would compare actions directly using a state-action
+-- | given an action; otherwise you would directly compare the value of actions using a state-action
 -- | method such as Q-Learning or a policy neural network.
 -- | TODO Improve naming and module-placement of getAction, selectAction, forward, backward
 selectAction :: Exp Cell -> Exp Bool -> Acc (Array DIM1 Int) -> Acc Agent -> Acc Grid -> Acc Frep -> Acc (Scalar DIM1, Scalar Float, Frep)
 selectAction cell eIsEnd chs agent grid frep = A.lift (A.unit idx, A.unit qval, afrep)
   where
     afreps = incAfterStateFreps cell eIsEnd chs grid frep :: Acc (Array DIM4 Int)
+    -- Flatten each internal frep
     aflat_sh = index2 (A.length chs) (A.lift (rOWS * cOLS * (cHANNELS + 1)))
     afreps_flat = A.reshape aflat_sh afreps
     afreps_flat_f = A.map A.fromIntegral afreps_flat
     -- Batch mode vector-vector inner dot product;
     -- the result of which is a Q-value for each ch.
-    weights = agent^._1 :: Acc (Array DIM1 Float)
-    batch_weights = A.replicate (A.lift (Z :. A.length chs :. All)) weights
+    weights = agent ^. _1 :: Acc (Array DIM1 Float)
     -- In this domain, the grid transitions deterministically given an event
     -- and a channel as action. Th
-    qvals = A.flatten $ A.fold (+) 0 $ A.zipWith (*) afreps_flat_f batch_weights
+    qvals =  mvMul afreps_flat_f weights
     -- Strictly greedy action selection through argmax. This is where you
     -- would perform exploration, such as epsilon-greedy or Boltzmann exploration,
     -- instead of picking the action with the highest action value (Q-val).
     (idx, qval) = argpmax qvals
     -- The afterstate feature rep resulting from executing the best action
-    afrep_sh = A.lift (Z :. unindex1 idx :. All :. All :. All)
-    afrep = slice afreps afrep_sh :: Acc Frep
+    afrep_pos = A.lift (Z :. unindex1 idx :. All :. All :. All)
+    afrep = slice afreps afrep_pos :: Acc Frep
