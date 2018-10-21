@@ -38,7 +38,7 @@ data SimError = NEligOverflow
 data SimStop = Success
              | Paused
              | ZeroLoss Float
-             | NaNLoss String
+             | NaNLoss
              | InternalError SimError
              | UserQuit deriving (Show, Eq)
 
@@ -141,17 +141,11 @@ runPeriod accRunStep = do
         mbLoss <- accRunStep
         grid <- use ssGrid
         frep <- use ssFrep
-        prevGrid <- use ssPGrid
-        prevFrep <- use ssPFrep
         iTotal <- use ssIter
-        let maxNElig = theR $ runN bkend (A.unit . A.snd . A.lift . argpmax) frep
-            stateStr = printf "Prev Grid: %s Current Grid: &s Prev Frep: %s Current Frep: %s"
-              (showGrid prevGrid)
-              (showGrid grid)
-              (show prevFrep)
-              (show frep)
+        let
+            maxNElig = theR $ runN bkend (A.maximum . A.flatten) frep
         return $ case mbLoss of
-          Nothing -> (-1, Just $ NaNLoss stateStr)
+          Nothing -> (-1, Just NaNLoss)
           Just loss
             -- There's a bug in the program; break out.
             -- TODO instead dump all of acc state + event + iter + agent.
@@ -216,27 +210,38 @@ runSim seed opts = do
   -- Print out useful info in case of bugs
   case simstop of
    InternalError ie -> do
+     let prevFrep = sState'^.ssPFrep
+         curFrep = sState'^.ssFrep
+         runMax arr = theR $ runN bkend (A.maximum . A.flatten) arr
+         prevMaxNElig = runMax prevFrep
+         curMaxNElig = runMax curFrep
      print "Prev event"
      print  $ sState'^.ssPEvent
      print "Prev grid"
      putStrLn $ showGrid $ sState'^.ssPGrid
-     print "Prev frep"
+     print $ "Prev frep | max: " ++ show prevMaxNElig
      print $ sState'^.ssPFrep
-     print "Prev agent"
-     print $ sState'^.ssPAgent
      print "Current iter"
      print $ sState'^.ssIter
      print "Current event"
      print $ sState'^.ssEvent
      print "Current grid"
      putStrLn $ showGrid $ sState'^.ssGrid
-     print "Current frep"
-     print $ sState'^.ssFrep
-     print "Current agent"
-     print $ sState'^.ssAgent
-     when (ie == ReuseConstraintViolated) $
-       print $ "Channels in use:" ++
-       (show . runN bkend $ indicesOf3 $ A.use (sState'^.ssGrid))
+     print $ "Current frep | max: " ++ show curMaxNElig
+     print curFrep
+     case ie of
+       ReuseConstraintViolated ->
+         print $ "Channels in use:" ++
+         (show . runN bkend $ indicesOf3 $ A.use (sState'^.ssGrid))
+       NEligOverflow -> do
+         let prevMaxWnet = runMax (sState'^.ssPAgent._1)
+             curMaxWnet = runMax (sState'^.ssAgent._1)
+             prevMaxWgrad = runMax (sState'^.ssPAgent._2)
+             curMaxWgrad = runMax (sState'^.ssAgent._2)
+         putStrLn $ printf "Prev agent | max wnet: %.2f | max wgrad: %.2f" prevMaxWnet prevMaxWgrad
+         print $ sState'^.ssPAgent
+         putStrLn $ printf "Current agent | max wnet: %.2f | max wgrad: %.2f" curMaxWnet curMaxWgrad
+         print $ sState'^.ssAgent
    _ -> return ()
 
   -- Print the final 'statistics' report
@@ -255,7 +260,8 @@ runSim seed opts = do
       sim_dt_min = floor last_etime :: Int
       sim_dt_rem_sec = floor ((last_etime - fromIntegral sim_dt_min) * 60.0) :: Int
     in putStrLn $ printf
-        "\nSimulation duration: %dm%ds in sim time, %dm%ds wall clock with speed %d events at %.0f events/second"
+        "\nSimulation duration: %dm%ds in sim time,\
+        \ %dm%ds wall clock with speed %d events at %.0f events/second"
         sim_dt_min sim_dt_rem_sec
         dt_min dt_rem_sec
         i rate
