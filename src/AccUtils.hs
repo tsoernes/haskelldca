@@ -22,63 +22,55 @@ import qualified Data.Array.Accelerate.Interpreter as Interp (run, run1, runN)
 import qualified Data.Array.Accelerate.LLVM.Native as CPU (run, run1, runN)
 import Data.Array.Accelerate.Trafo
 
-pattern T2 :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a, b)
 
+pattern T2 :: (Elt a, Elt b) => Exp a -> Exp b -> Exp (a, b)
 pattern T2 a b <- (unlift -> (a, b))
   where T2 a b = lift (a, b)
-
 {-# COMPLETE T2 #-}
 
-pattern T3 :: (Elt a, Elt b, Elt c) =>
-        Exp a -> Exp b -> Exp c -> Exp (a, b, c)
 
+pattern T3 :: (Elt a, Elt b, Elt c) => Exp a -> Exp b -> Exp c -> Exp (a, b, c)
 pattern T3 a b c <- (unlift -> (a, b, c))
   where T3 a b c = lift (a, b, c)
-
 {-# COMPLETE T3 #-}
 
-pattern A0 :: (Elt a) => Exp a -> Acc (Scalar a)
 
+pattern A0 :: (Elt a) => Exp a -> Acc (Scalar a)
 pattern A0 a <- (the -> a)
   where A0 = unit
-
 {-# COMPLETE A0 #-}
 
-pattern A2 :: (Arrays a, Arrays b) => Acc a -> Acc b -> Acc (a, b)
 
+pattern A2 :: (Arrays a, Arrays b) => Acc a -> Acc b -> Acc (a, b)
 pattern A2 a b <- (unlift -> (a, b))
   where A2 a b = lift (a, b)
-
 {-# COMPLETE A2 #-}
+
 
 pattern A3 :: (Arrays a, Arrays b, Arrays c) =>
         Acc a -> Acc b -> Acc c -> Acc (a, b, c)
-
 pattern A3 a b c <- (unlift -> (a, b, c))
   where A3 a b c = lift (a, b, c)
-
 {-# COMPLETE A3 #-}
 
-pattern D2 :: Exp Int -> Exp Int -> Exp DIM2
 
+pattern D2 :: Exp Int -> Exp Int -> Exp DIM2
 pattern D2 a b <- (unlift . unindex2 -> (a, b))
   where D2 a b = index2 a b
-
 {-# COMPLETE D2 #-}
 
-pattern D3 :: Exp Int -> Exp Int -> Exp Int -> Exp DIM3
 
+pattern D3 :: Exp Int -> Exp Int -> Exp Int -> Exp DIM3
 pattern D3 a b c <- (unlift . unindex3 -> (a, b, c))
   where D3 a b c = index3 a b c
-
 {-# COMPLETE D3 #-}
 
-pattern D4 :: Exp Int -> Exp Int -> Exp Int -> Exp Int -> Exp DIM4
 
+pattern D4 :: Exp Int -> Exp Int -> Exp Int -> Exp Int -> Exp DIM4
 pattern D4 a b c d <- (unlift . unindex4 -> (a, b, c, d))
   where D4 a b c d = index4 a b c d
-
 {-# COMPLETE D4 #-}
+
 
 -- | Execute Accelerate expressions
 run :: Arrays a => Backend -> Acc a -> a
@@ -150,7 +142,7 @@ runScalarAcc ::
   => Backend
   -> Acc (Array DIM0 a, b)
   -> (a, b)
-runScalarAcc backend acc = (A.indexArray arrA Z, arrB)
+runScalarAcc backend acc = (theR arrA, arrB)
   where
     (arrA, arrB) = run backend acc
 

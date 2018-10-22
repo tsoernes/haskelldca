@@ -11,8 +11,8 @@ import Gridneighs
 
 
 inp = scalar ()
-generateNeighsAcc'' = CPU.runN generateNeighsAcc'
--- generateNeighsAcc'' =  $( CPU.runQ generateNeighsAcc' )
+-- generateNeighsAcc'' = CPU.runN generateNeighsAcc'
+generateNeighsAcc'' =  $( CPU.runQ generateNeighsAcc' )
 generateNeighs2Acc'' = CPU.runN generateNeighs2Acc'
 neighSegments' = CPU.runN neighSegments
 

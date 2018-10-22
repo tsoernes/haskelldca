@@ -218,7 +218,7 @@ runSim seed opts = do
      print "Prev event"
      print  $ sState'^.ssPEvent
      print "Prev grid"
-     putStrLn $ showGrid $ sState'^.ssPGrid
+     putStrLn . showGrid $ sState'^.ssPGrid
      print $ "Prev frep | max: " ++ show prevMaxNElig
      print $ sState'^.ssPFrep
      print "Current iter"
@@ -226,7 +226,7 @@ runSim seed opts = do
      print "Current event"
      print $ sState'^.ssEvent
      print "Current grid"
-     putStrLn $ showGrid $ sState'^.ssGrid
+     putStrLn . showGrid $ sState'^.ssGrid
      print $ "Current frep | max: " ++ show curMaxNElig
      print curFrep
      case ie of

@@ -1,6 +1,5 @@
 ghc-options:
   "$targets": -Wall -threaded -rtsopts -with-rtsopts=-xc -with-rtsopts=-N
-  "$locals": -fplugin=Data.Array.Accelerate.LLVM.Native.Plugin
 
 allow-newer: true
 build:
