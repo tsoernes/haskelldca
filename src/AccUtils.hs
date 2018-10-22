@@ -124,7 +124,7 @@ run1S bkend acc = run1 bkend acc' $ scalar ()
 
 
 runExp :: (Elt a) => Backend -> Exp a -> a
-runExp backend expa = A.indexArray (run backend $ unit expa) Z
+runExp backend expa = thee $ run backend $ unit expa
 
 
 -- | Run an Exp and an Acc
@@ -148,17 +148,17 @@ runScalarAcc ::
   => Backend
   -> Acc (Array DIM0 a, b)
   -> (a, b)
-runScalarAcc backend acc = (theR arrA, arrB)
+runScalarAcc backend acc = (thee arrA, arrB)
   where
     (arrA, arrB) = run backend acc
 
 
 -- | Like `the`, but for non-Acc Scalars.
-theR :: (Elt e) => Scalar e -> e
-theR arr = A.indexArray arr Z
+thee :: (Elt e) => Scalar e -> e
+thee arr = A.indexArray arr Z
 
 
--- | Like `unit`
+-- | Like `unit`, outside of Acc
 scalar :: (Elt e) => e -> Scalar e
 scalar e = A.fromList Z [e]
 

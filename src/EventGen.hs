@@ -69,8 +69,7 @@ reassign cell fromCh toCh = do
   -- Change the 'toCh' field of the 'eId' event in the event-hashmap to
   -- reflect the channel reassignment
   modifyPart egEvents $ Map.adjust (\evs -> set evType (END toCh (hoffCell $ view evType evs)) evs) eId
-  let ret = trace ("reassigned") ()
-  return ret
+  return ()
 
 
 generateNewEvent ::

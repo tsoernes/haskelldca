@@ -68,7 +68,7 @@ runStep accFn1 accFn2 = do
       (mbCh, nextFrep) = accFn1 cell eIsEnd agent grid frep
 
   -- Generate next events; receive the next event to be processed.
-  environmentStep (theR mbCh)
+  environmentStep (thee mbCh)
 
   alphaN <- asks (scalar . alphaNet)
   alphaA <- asks (scalar . alphaAvg)
@@ -86,10 +86,10 @@ runStep accFn1 accFn2 = do
   ssPAgent .= agent
   ssPEvent .= event
 
-  let ret = theR loss
+  let ret = thee loss
       nextFrep' = runN bkend featureRep' nextGrid
       ret1 = assert (nextFrep == nextFrep') ret
-      -- ret3 = trace (printf "Reward|Loss: %d %s" (theR reward) (show ret)) ret2
+      -- ret3 = trace (printf "Reward|Loss: %d %s" (thee reward) (show ret)) ret2
   return ret1
 
 
@@ -167,7 +167,7 @@ runPeriod accRunStep = do
   (losses, simstop) <- untilJust runStep'
   -- Get statistics report and reset period counters
   i <- use ssIter
-  avgR <- uses (ssAgent . _3) theR
+  avgR <- uses (ssAgent . _3) thee
   report <- statePartM ssStats (statsReportPeriod i losses avgR)
   return $ case simstop of
     Paused -> (report, Nothing)
@@ -210,7 +210,7 @@ runSim seed opts = do
    InternalError ie -> do
      let prevFrep = sState'^.ssPFrep
          curFrep = sState'^.ssFrep
-         runMax arr = theR $ runN bkend (A.maximum . A.flatten) arr
+         runMax arr = thee $ runN bkend (A.maximum . A.flatten) arr
          prevMaxNElig = runMax prevFrep
          curMaxNElig = runMax curFrep
      print "Prev event"
