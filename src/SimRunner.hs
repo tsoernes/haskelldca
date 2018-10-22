@@ -134,6 +134,7 @@ runPeriod accRunStep = do
   bkend <- asks backend
   minLoss' <- asks minLoss
   verifyRC <- asks verifyReuseConstraint
+  verifyNB <- asks verifyNEligBounds
   iStart <- use ssIter
   let runStep' :: (MonadReader Opt m, MonadState SimState m)
         => m (Float, Maybe SimStop)
@@ -142,21 +143,18 @@ runPeriod accRunStep = do
         grid <- use ssGrid
         frep <- use ssFrep
         iTotal <- use ssIter
-        let
-            maxNElig = theR $ runN bkend (A.maximum . A.flatten) frep
+        let maxNElig = thee $ run1 bkend (A.maximum . A.flatten) frep
         return $ case mbLoss of
           Nothing -> (-1, Just NaNLoss)
           Just loss
             -- There's a bug in the program; break out.
-            -- TODO instead dump all of acc state + event + iter + agent.
-            -- TODO pre and on overflow
-            | verifyRC && runExp bkend (violatesReuseConstraint (A.use grid))
+            | verifyRC && run1Exp bkend violatesReuseConstraint grid
               -> (loss, Just $ InternalError ReuseConstraintViolated)
             -- The count for eligible channels is too high. Bug in program.
-            | maxNElig > 70
+            | verifyNB && maxNElig > 70
               -> (loss, Just $ InternalError NEligOverflow)
-            -- Agent has finished training (likely it has not trained at all)
-            | minLoss' > 0 && iStart > 50 && abs loss < minLoss'
+            -- Agent has finished training (maybe it has not trained at all)
+            | minLoss' > 0 && iTotal > 50 && abs loss < minLoss'
               -> (loss, Just (ZeroLoss loss))
             -- Simulation finished
             | iTotal == nEvents'

@@ -130,8 +130,8 @@ environmentStep act = do
       in when (toCh /= fromCh) $ statePartM ssEventgen (reassign cell fromCh toCh)
   ssIter += 1
   nextEvent <- statePartM ssEventgen pop
-  let nextEvent' = trace ("Action|Event:" ++ show act ++ "|" ++ show event) nextEvent
-  ssEvent .= nextEvent'
+  -- let nextEvent' = trace ("Action|Event:" ++ show act ++ "|" ++ show event) nextEvent
+  ssEvent .= nextEvent
 
 -- | Execute the action on the grid and return the resulting reward.
 gridStep :: Exp Bool -> Exp Cell -> Exp (M.Maybe Ch) -> Acc Grid -> Acc (Scalar Int, Grid)

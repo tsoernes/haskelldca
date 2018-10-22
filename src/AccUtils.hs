@@ -90,9 +90,15 @@ run1 Interpreter = Interp.run1
 run1 CPU = CPU.run1
 
 
+-- | Execute Accelerate expressions
+run1Exp :: (Arrays a, Elt b) => Backend -> (Acc a -> Exp b) -> a -> b
+run1Exp bkend fn inp = thee $ run1 bkend (unit . fn) inp
+
+
 -- | Run just once ..?
 recycle1E :: (Elt a, Arrays b) => (Exp a -> Acc b) -> a -> Acc b
 recycle1E fn inp = use $ run1 CPU (fn . the) (scalar inp)
+
 
 -- -- | Run just once ..?
 -- recycleConst :: forall a. (Arrays a) => Acc a -> Acc a
