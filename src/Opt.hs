@@ -17,6 +17,7 @@ data Opt = Opt
   , alphaAvg :: Float
   , alphaGrad :: Float
   , verifyReuseConstraint :: Bool
+  , verifyNEligBounds :: Bool
   , backend :: Backend
   , minLoss :: Float
 } deriving (Show)
@@ -61,9 +62,10 @@ getOpts = Opt <$>
      <> value 5e-6
      <> help "Learning rate for gradient correction.") <*>
   switch (long "verify_reuse_constraint") <*>
+  switch (long "verify_nelig_bounds") <*>
   option bkendOpt
     (long "backend" <> showDefault
-     <> value CPU
+     <> value Interpreter
      <> help bkendOptStr)  <*>
   option auto
     (long "min_loss" <> metavar "F"  <> showDefault

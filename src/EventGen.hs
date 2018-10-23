@@ -22,7 +22,7 @@ import Control.Lens ( (^.), uses, view, set )
 import Control.Monad.Reader ( MonadReader, asks )
 import Control.Monad.State.Strict ( MonadState(state), StateT, execStateT, modify', get )
 import qualified Data.Heap as Heap ( view )
-import qualified Data.Map.Strict as Map ( adjust, (!?), delete, insert )
+import qualified Data.Map.Strict as Map ( adjust, (!), delete, insert )
 import Data.Maybe ( fromJust )
 import Data.RVar ( sampleRVar )
 import Data.Random ( MonadRandom, uniform )
@@ -31,6 +31,7 @@ import Data.Word ( Word64 )
 import Gridneighs ( getNeighs )
 import LensUtils ( modifyPart, statePartM, statePart  )
 import Opt ( Opt(callDurHoff, callDurNew, callRate) )
+import Debug.Trace (trace)
 
 
 -- | Retrieve the highest priority event from the event generator.
@@ -41,11 +42,11 @@ pop = do
   -- ^ Pop an identifier from the heap and retrieve the corresponding event
   -- from the hashmap. Then delete the it from the hashmaps.
   let eId = ekId eKey
-  event <- fromJust <$> uses egEvents (Map.!? eId)
-  modifyPart egEvents $ Map.delete eId
+  event <- statePart egEvents (mapRemove eId)
   case event ^. evType of
-    END ch _ -> modifyPart egEndIds (Map.delete (view evCell event, ch))
+    END ch _ -> modifyPart egEndIds (Map.delete (event ^. evCell, ch))
     _ -> return ()
+  -- let event' = trace ("Popped: " ++ show event) event
   return event
 
 -- | Given a random seed, create an EventGen with initial events:
@@ -70,6 +71,7 @@ reassign cell fromCh toCh = do
   modifyPart egEvents $ Map.adjust (\evs -> set evType (END toCh (hoffCell $ view evType evs)) evs) eId
   return ()
 
+
 generateNewEvent ::
      (MonadRandom m, MonadReader Opt m, MonadState EventGen m)
      => Double -- Current time
@@ -77,11 +79,11 @@ generateNewEvent ::
      -> m ()
 generateNewEvent time cell = do
   lam <- asks callRate -- in calls per hour
-  let lam' = 1 / (lam / 60.0)
+  let lam' = 1.0 / (lam / 60.0)
   dt <- sampleRVar (exponential lam')
   let t = time + dt
-  _ <- push $ Event t NEW cell
-  return ()
+  push $ Event t NEW cell
+
 
 -- | Hand off a call to another cell. A hand-off consists of two call events:
 -- | A termination event (END) immediately succeeded

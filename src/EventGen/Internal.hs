@@ -76,7 +76,6 @@ push event@(Event time etype cell) = do
     END ch _ -> modifyPart egEndIds $ Map.insert (cell, ch) eId
     _ -> return ()
   egId += 1
-  return ()
 
 
 _generateEndEvent ::
@@ -84,8 +83,8 @@ _generateEndEvent ::
   Double -> Cell -> Ch -> Double -> m ()
 _generateEndEvent time cell ch lam = do
   dt <- sampleRVar (exponential (lam :: Double))
-  _ <- push $ Event (time + dt) (END ch Nothing) cell
-  return ()
+  push $ Event (time + dt) (END ch Nothing) cell
+
 
 -- | Look up the value for a key 'k'; remove and return the value
 mapRemove :: Ord k => k -> Map.Map k a -> (a, Map.Map k a)

@@ -1,6 +1,7 @@
 ghc-options:
   "$targets": -Wall -threaded -rtsopts -with-rtsopts=-xc -with-rtsopts=-N
 
+allow-newer: true
 build:
   library-profiling: true
   executable-profiling: true
@@ -8,12 +9,15 @@ build:
   open-haddocks: false
   haddock-deps: false
   haddock-internal: false
-
-flags: 
+flags:
         accelerate-blas:
                 llvm-ptx: false
         accelerate:
                 debug: true
+                bounds-checks: true
+                internal-checks: true
+                nofib: true
+                unsafe-checks: true
 packages:
 - .
 resolver: lts-12.10

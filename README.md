@@ -1,5 +1,5 @@
 # Dynamic Channel Allocation by Reinforcement Learning
-This project implements a RL agent for doing Dynamic Channel Allocation in a 
+This project implements a RL agent for doing Dynamic Channel Allocation in a
 simulated mobile caller environment.
 
 The implementation is in Haskell and uses
@@ -12,7 +12,7 @@ originally defined for discounted returns in
 [Sutton et al. 2009](https://www.ics.uci.edu/~dechter/courses/ics-295/winter-2018/papers/2009-sutton-Fast_gradient-descent.pdf):
 "Fast gradient-descent methods for temporal-difference learning with linear function approximation."
 
-For an introduction to the channel allocation problem and how RL 
+For an introduction to the channel allocation problem and how RL
 is applied to solving it, see:
 [Torstein Sørnes 2018](
 https://brage.bibsys.no/xmlui/bitstream/handle/11250/2562774/19523_FULLTEXT.pdf):
@@ -21,7 +21,7 @@ Contributions to centralized dynamic channel allocation reinforcement learning a
 See also the version written in [Rust](https://github.com/tsoernes/rustdca)
 and [Python](https://github.com/tsoernes/dca).
 
-## How to build 
+## How to build
 The following builds with O2 and other optimizations.
 ```
 stack build --stack-yaml stack-release.yaml
@@ -32,11 +32,11 @@ To build without optimizations but with profiling flags, drop the `--stack-yaml 
 ```
 stack exec --stack-yaml stack-release.yaml dca-exe -- --backend cpu
 ```
-Which will run the project, and on startup generate a full computational graph which 
-contains both the caller network simulator and the agents neural network. 
+Which will run the project, and on startup generate a full computational graph which
+contains both the call network simulator and the agent's neural network.
 The computational graph is compiled using `Accelerate.LLVM.Native`, and executed
 on the CPU. To use Accelerate's build-in interpreter instead, skip the `--backend cpu` flag.
-Support for compiling to GPU can be obtained by adding the dependency 
+Support for compiling to GPU can be obtained by adding the dependency
 `accelerate-llvm-ptx` and switching out the imports in `AccUtils.hs`.
 
 To see available options, run:

@@ -46,6 +46,7 @@ import TestBase
 import Data.Foldable (forM_, for_)
 import qualified Data.Set
 import Gridneighs
+import Gridconsts
 import Test.Hspec
 import Opt
 

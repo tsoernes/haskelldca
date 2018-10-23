@@ -54,22 +54,32 @@ spec = do
       in do it "Same eligible channels" $ elig1 `shouldBe` elig2
             it "Should have 69 eligible channels" $ nElig1 `shouldBe` (cHANNELS - 1)
 
-  describe "afterstates" $ do
-    let setIdx _ = constant (Z :. 3 :. 3 :. 0) :: Exp DIM3
-        grid' = permute const mkAGrid setIdx (unit $ A.lift True)
+  describe "afterstates" $
+    let grid' = afterstate (3, 3) 0 True grid
         chs = eligibleChs (constant (3, 3)) grid'
         -- Get the afterstates of a call arrival
         -- and calculate a (partial) frep for each outcome
         afsB = afterstates grid' (3, 3) NEW chs
         afsI = A.map boolToInt afsB :: Acc (Array DIM4 Int)
         s1 = run bkend $ A.sum $ flatten afsI
-    it ("can run w/o crashing / afsI sum:" P.++ show s1) $ s1 `shouldBe` s1
+      in it ("can run w/o crashing / afsI sum:" P.++ show s1) $ s1 `shouldBe` s1
 
-  describe "featureRep" $ do
-    let setIdx _ = constant (Z :. 3 :. 3 :. 0) :: Exp DIM3
-        grid' = permute const mkAGrid setIdx (unit $ A.lift True)
+  describe "featureRep" $
+    let grid' = afterstate (3, 3) 0 True grid
         frep = run bkend $ featureRep grid'
-    it "can run w/o crashing" $ frep `shouldBe` frep
+      in it "can run w/o crashing" $ frep `shouldBe` frep
+
+  describe "featureRepCmp" $
+    let (frep1a, frep1b) = run bkend $ lift (featureRep grid, featureRep' grid)
+        grid2 = afterstate (3, 3) 0 True grid
+        (frep2a, frep2b) = run bkend $ lift (featureRep grid2, featureRep' grid2)
+        grid3__ = afterstate (3, 3) 1 True grid2
+        grid3_ = afterstate (5, 0) 0 True grid3__
+        grid3 = afterstate (5, 0) 1 True grid3_
+        (frep3a, frep3b) = run bkend $ lift (featureRep grid3, featureRep' grid3)
+      in do it "empty" $ frep1a `shouldBe` frep1b
+            it "1 ch in use" $ frep2a `shouldBe` frep2b
+            it "many chs in use" $ frep3a `shouldBe` frep3b
 
   describe "incAfterStateFreps " $ do
     let ch = 0
@@ -82,10 +92,79 @@ spec = do
         rafreps = run bkend afreps
         afreps_sh = arrayShape rafreps
         n_chs = runExp bkend $ A.length chs
-    it "can run w/o crashing due to nested data parallelism" $
-      rafreps `shouldBe` rafreps
-    it "has the right shape" $
-      afreps_sh `shouldBe` (Z :. n_chs :. rOWS :. cOLS :. cHANNELS + 1)
+      in do it "can run w/o crashing due to nested data parallelism" $
+              rafreps `shouldBe` rafreps
+            it "has the right shape" $
+              afreps_sh `shouldBe` (Z :. n_chs :. rOWS :. cOLS :. cHANNELS + 1)
+    let (frep1a, frep1b) = run bkend $ lift (featureRep grid, featureRep' grid)
+        -- TODO compare incremental with manual
+        grid2 = afterstate (3, 3) 0 True grid
+        (frep2a, frep2b) = run bkend $ lift (featureRep grid2, featureRep' grid2)
+        grid3__ = afterstate (3, 3) 1 True grid2
+        grid3_ = afterstate (5, 0) 0 True grid3__
+        grid3 = afterstate (5, 0) 1 True grid3_
+        (frep3a, frep3b) = run bkend $ lift (featureRep grid3, featureRep' grid3)
+      in return ()
+
+  describe "incAfterStateFrepsCmp " $
+    let cell1 = (4, 5)
+        cell2 = (6, 2)
+        grid1 = afterstate cell1 69 True grid
+        grid2 = afterstate cell2 49 True grid1
+        grid3 = afterstate cell2 69 True grid2
+        grid4 = afterstate cell2 69 False grid3
+
+        frep0 = featureRep grid
+        frep1a = featureRep grid1
+        frep1b = featureRep' grid1
+        frep1c = incAfterStateFrep cell1 False 69 grid frep0
+
+        frep2a = featureRep grid2
+        frep2b = featureRep' grid2
+        frep2c = incAfterStateFrep cell2 False 49 grid1 frep1a
+
+        frep3a = featureRep grid3
+        frep3b = featureRep' grid3
+        frep3c = incAfterStateFrep cell2 False 69 grid2 frep2a
+
+        frep4a = featureRep grid4
+        frep4b = featureRep' grid4
+        frep4c = incAfterStateFrep cell2 True 69 grid3 frep3a
+        whereDiff4c = indicesOf3 $ A.zipWith (A./=) frep4a frep4c
+        -- [4,2,70], [5,1,70], [5,2,70], [6,0,70], [6,1,70], [6,2,70]
+        -- A _subset_ of the d2-neighbors of `cell2` and the cell itself
+        -- has not had their elig-chs increased on termination.
+        -- In particular, it is the subset not covered by the d2 nb.hood of `cell1`
+
+        (afrep1a, afrep1b, afrep1c,
+         afrep2a, afrep2b, afrep2c,
+         afrep3a, afrep3b, afrep3c,
+         afrep4a, afrep4b, afrep4c, aWhereDiff4c)
+          = run bkend $ lift
+          (frep1a, frep1b, frep1c,
+           frep2a, frep2b, frep2c,
+           frep3a, frep3b, frep3c,
+           frep4a, frep4b, frep4c, whereDiff4c)
+
+      in do it "manual-new shouldBe manual-old #1" $
+              afrep1b `shouldBe` afrep1a
+            it "inc (base manual-old) shouldBe manual-old #1" $
+              afrep1c `shouldBe` afrep1a
+
+            it "manual-new shouldBe manual-old #2" $
+              afrep2b `shouldBe` afrep2a
+            it "inc (base manual-old) shouldBe manual-old #2" $
+              afrep2c `shouldBe` afrep2a
+
+            it "manual-new shouldBe manual-old #3" $
+              afrep3b `shouldBe` afrep3a
+            it "inc (base manual-old) shouldBe manual-old #3" $
+              afrep3c `shouldBe` afrep3a
+
+            it "manual-new shouldBe manual-old #4" $
+              afrep4b `shouldBe` afrep4a
+            it ("inc (base manual-old) shouldBe manual-old #4\n" P.++ showShapes aWhereDiff4c) $
+              afrep4c `shouldBe` afrep4a
 
   describe "selectAction" $ do
     let sstate = runReader (mkSimState seed) popts
@@ -96,7 +175,7 @@ spec = do
         cell = constant (3, 3)
         chs = eligibleChs cell grid'
         eIsEnd = constant False
-        agent = A.use $ view ssAgent sstate
+        agent = use $ runReader mkAgent popts
         -- A3 _idx _qval _afrep
         result = selectAction cell eIsEnd chs agent grid' frep'
         (idx, qval, afrep) = run bkend result
