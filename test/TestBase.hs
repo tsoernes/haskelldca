@@ -17,4 +17,4 @@ popts = fromJust $ getParseResult $ trace ("\n" ++ show _optParse) _optParse
     _optParse :: ParserResult Opt
     _optParse = execParserPure defaultPrefs _opts []
     _opts :: ParserInfo Opt
-    _opts = info (getOpts <**> helper) fullDesc
+    _opts = info (getOpts 0 <**> helper) fullDesc

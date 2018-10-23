@@ -107,7 +107,7 @@ statsReportPeriod i losses avgReward = do
       str =
         printf
           "Blocking probability events %d-%d: %.4f, cumulative %.4f, avg. loss: %.1f, avg. reward %.4f"
-          (min (i - li) 0)
+          (max (i - li) 0)
           i
           logIterBpNew
           cumuNew

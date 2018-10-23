@@ -4,6 +4,7 @@ import Data.Char (toLower)
 import Data.Semigroup ((<>))
 import Options.Applicative
 import Base
+import Data.Word
 
 
 data Opt = Opt
@@ -20,11 +21,12 @@ data Opt = Opt
   , verifyNEligBounds :: Bool
   , backend :: Backend
   , minLoss :: Float
+  , rngSeed :: Word64
 } deriving (Show)
 
 
-getOpts :: Parser Opt
-getOpts = Opt <$>
+getOpts :: Word64 -> Parser Opt
+getOpts rand = Opt <$>
   option auto
     (long "call_dur" <> metavar "MINUTES" <> showDefault
      <> value 3.0
@@ -70,10 +72,16 @@ getOpts = Opt <$>
   option auto
     (long "min_loss" <> metavar "F"  <> showDefault
      <> value 0
-     <> help "Abort simulation if loss goes below given absolute value. Set to 0 to disable.")
+     <> help "Abort simulation if loss goes below given absolute value. Set to 0 to disable.") <*>
+  seedParser rand
+
+seedParser :: Word64 -> Parser Word64
+seedParser rand = (\b -> if b then 0 else rand) <$>
+  switch (long "fixed_rng" <> help "Use 0 for rng seed (is random if not enabled)")
 
 bkendOptStr :: String
-bkendOptStr = "Accepted backends are 'interp' for 'Interpreter' and 'cpu' for 'LLVM.Native'. The interpreter yields better error messages."
+bkendOptStr = "Accepted backends are 'interp' for 'Interpreter' and 'cpu' for 'LLVM.Native'.\
+              \The interpreter yields better error messages."
 
 bkendOpt :: ReadM Backend
 bkendOpt = str >>= \s -> case map toLower s of

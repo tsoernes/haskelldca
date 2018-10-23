@@ -188,7 +188,7 @@ runPeriodWrapper accRunLogIter opts currentState = do
     (\e -> let ret = return (("", Just UserQuit), currentState) in
             case E.fromException e of
               Just E.UserInterrupt -> ret
-              Nothing -> ret)
+              _ -> ret)
     (E.evaluate periodResult)
   putStrLn $ fst liRes
   whenJust (snd liRes) print
