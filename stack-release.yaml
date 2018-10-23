@@ -14,8 +14,10 @@ build:
 flags: 
         accelerate-blas:
                 llvm-ptx: false
+
         accelerate:
                 debug: false
+                nofib: false
 packages:
 - .
 resolver: lts-12.10

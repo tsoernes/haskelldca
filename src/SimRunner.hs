@@ -29,7 +29,11 @@ import           Simulator
 import           Stats
 import           Text.Printf ( printf )
 import           Debug.Trace ( trace )
-import           Control.Exception (assert)
+import System.Exit
+import System.Posix.Signals
+import Control.Concurrent
+import qualified Control.Exception as E
+
 
 data SimError = NEligOverflow
               | ReuseConstraintViolated deriving (Show, Eq)
@@ -75,7 +79,8 @@ runStep accFn1 accFn2 = do
   alphaG <- asks (scalar . alphaGrad)
   let -- Execute action on the grid, receive a reward; then train the agent on
       -- the just observed state transition and reward.
-      (nextGrid, nextAgent, loss, reward) = accFn2 alphaN alphaA alphaG eIsEnd cell mbCh frep nextFrep grid agent
+      (nextGrid, nextAgent, loss, reward) =
+        accFn2 alphaN alphaA alphaG eIsEnd cell mbCh frep nextFrep grid agent
   -- Update the rest of the state
   ssAgent .= nextAgent
   ssGrid .= nextGrid
@@ -86,11 +91,7 @@ runStep accFn1 accFn2 = do
   ssPAgent .= agent
   ssPEvent .= event
 
-  let ret = thee loss
-      nextFrep' = runN bkend featureRep' nextGrid
-      ret1 = assert (nextFrep == nextFrep') ret
-      -- ret3 = trace (printf "Reward|Loss: %d %s" (thee reward) (show ret)) ret2
-  return ret1
+  return $ thee loss
 
 
 gridStepTrain :: Acc (Scalar Float)
@@ -181,7 +182,14 @@ runPeriodWrapper :: StateT SimState (ReaderT Opt Identity) (String, Maybe SimSto
   -> SimState
   -> IO (Either SimState (SimState, SimStop))
 runPeriodWrapper accRunLogIter opts currentState = do
-  let (liRes, newState) = runReader (runStateT accRunLogIter currentState) opts
+  let periodResult = runReader (runStateT accRunLogIter currentState) opts
+  -- Handle Ctrl-C key-quit by simply returning input state.
+  (liRes, newState) <- E.handle
+    (\e -> let ret = return (("", Just UserQuit), currentState) in
+            case E.fromException e of
+              Just E.UserInterrupt -> ret
+              Nothing -> ret)
+    (E.evaluate periodResult)
   putStrLn $ fst liRes
   whenJust (snd liRes) print
   return $ case snd liRes of
@@ -196,11 +204,10 @@ runSim seed opts = do
   let bkend = backend opts
       accFn1 = runN bkend getAction
       accFn2 = runN bkend gridStepTrain
-  -- Execute 'nEvents' in the simulator,
-  -- or until a non-pause 'simstop' occurs.
-  -- TODO graceful quit on CTRL-C
+  -- Execute 'nEvents' in the simulator, or until a non-pause 'simstop' occurs.
   startTime <- getCurrentTime
   let sState = runReader (mkSimState seed) opts
+      -- Partially apply with Acc functions to avoid recompiling each iteration
       runPeriodWrapperAcc = runPeriodWrapper $ runPeriod $ runStep accFn1 accFn2
       fn = runPeriodWrapperAcc opts
   (sState', simstop) <- loopM fn sState
