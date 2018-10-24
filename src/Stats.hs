@@ -139,8 +139,14 @@ statsReportEnd nCallsInProgress i = do
   let reported =  arrN + arrH - rejN - rejH - end
       reportedStr =
         if reported /= nCallsInProgress
-          then printf "\n\n\nSOME CALLS WERE LOST. According to reported calls there should be %d calls currently in progress at simulation end but there are %d\n" reported nCallsInProgress
+          then printf "\n\n\nSOME CALLS WERE LOST.\
+                      \ This should never happen on runs that exits with 'Success'.\
+                      \ According to reported calls there should be %d calls currently in\
+                      \ progress at simulation end but there are %d."
+                      reported nCallsInProgress
           else ""
-      progStr = printf "\n%d new arrivals of which %d have been rejected.\n%d calls in progress at simulation end." arrN rejN nCallsInProgress
+      progStr = printf "\n%d new arrivals of which %d have been rejected.\
+                        \ %d calls in progress at simulation end."
+                        arrN rejN nCallsInProgress
       str = durStr ++ bpStr ++ progStr ++ reportedStr
   return str

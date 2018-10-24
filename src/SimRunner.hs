@@ -8,13 +8,16 @@ import           Agent ( backward )
 import           Base
 import           Control.Lens
 import           Control.Monad.Extra (loopM, whenJust)
-import           Control.Monad.Reader ( MonadReader, asks, runReader , ReaderT, ask)
+import           Control.Monad.Reader ( Reader, MonadReader, asks, runReader , ReaderT, ask, liftIO, lift)
 import           Control.Monad.State
     ( Monad(return),
+      State,
       StateT(runStateT),
+      runState,
       MonadState,
       evalState,
-      when
+      when,
+      MonadIO
       )
 import           Data.Array.Accelerate (Acc, Scalar, the)
 import qualified Data.Array.Accelerate as A
@@ -177,96 +180,103 @@ runPeriod accRunStep = do
 
 -- | Run 'logIter' steps in the simulator then
 -- | print some statistics detailing the just-finished period.
-runPeriodWrapper :: StateT SimState (ReaderT Opt Identity) (String, Maybe SimStop)
-  -> Opt
+runPeriodWrapper :: (MonadReader Opt m, MonadIO m)
+  => StateT SimState m (String, Maybe SimStop)
   -> SimState
-  -> IO (Either SimState (SimState, SimStop))
-runPeriodWrapper accRunLogIter opts currentState = do
-  let periodResult = runReader (runStateT accRunLogIter currentState) opts
-  -- Handle Ctrl-C key-quit by simply returning input state.
-  (liRes, newState) <- E.handle
-    (\e -> let ret = return (("", Just UserQuit), currentState) in
-            case E.fromException e of
-              Just E.UserInterrupt -> ret
-              _ -> ret)
-    (E.evaluate periodResult)
-  putStrLn $ fst liRes
-  whenJust (snd liRes) print
-  return $ case snd liRes of
-    Nothing -> Left newState
-    Just ss -> Right (newState, ss)
+  -> m (Either SimState (SimState, SimStop))
+runPeriodWrapper accRunLogIter currentState = do
+  periodResult <- runStateT accRunLogIter currentState
+  -- Handle Ctrl-C key-quit by simply returning the input state.
+  liftIO $ do
+    (liRes, newState) <- E.handle
+      (\e -> let ret = return (("", Just UserQuit), currentState) in
+              case E.fromException e of
+                Just E.UserInterrupt -> ret
+                _ -> ret)
+      (E.evaluate periodResult)
+    putStrLn $ fst liRes
+    whenJust (snd liRes) print
+    return $ case snd liRes of
+      Nothing -> Left newState
+      Just ss -> Right (newState, ss)
 
 
 -- | Given random seed and simulation options, run the simulation
 -- | and print out stats.
-runSim :: Word64 -> Opt -> IO ()
-runSim seed opts = do
-  let bkend = backend opts
-      accFn1 = runN bkend getAction
+runSim :: (MonadReader Opt m, MonadIO m) => m ()
+runSim = do
+  startTime <- liftIO getCurrentTime
+  seed <- asks rngSeed
+  bkend <- asks backend
+  let accFn1 = runN bkend getAction
       accFn2 = runN bkend gridStepTrain
-  -- Execute 'nEvents' in the simulator, or until a non-pause 'simstop' occurs.
-  startTime <- getCurrentTime
-  let sState = runReader (mkSimState seed) opts
       -- Partially apply with Acc functions to avoid recompiling each iteration
       runPeriodWrapperAcc = runPeriodWrapper $ runPeriod $ runStep accFn1 accFn2
-      fn = runPeriodWrapperAcc opts
-  (sState', simstop) <- loopM fn sState
+  -- Execute 'nEvents' in the simulator, or until a non-pause 'simstop' occurs.
+  simState <- mkSimState seed
+  (simStateEnd, simStop) <- loopM runPeriodWrapperAcc simState
 
-  -- Print out useful info in case of bugs
-  case simstop of
-   InternalError ie -> do
-     let prevFrep = sState'^.ssPFrep
-         curFrep = sState'^.ssFrep
-         runMax arr = thee $ runN bkend (A.maximum . A.flatten) arr
-         prevMaxNElig = runMax prevFrep
-         curMaxNElig = runMax curFrep
-     print "Prev event"
-     print  $ sState'^.ssPEvent
-     print "Prev grid"
-     putStrLn . showGrid $ sState'^.ssPGrid
-     print $ "Prev frep | max: " ++ show prevMaxNElig
-     print $ sState'^.ssPFrep
-     print "Current iter"
-     print $ sState'^.ssIter
-     print "Current event"
-     print $ sState'^.ssEvent
-     print "Current grid"
-     putStrLn . showGrid $ sState'^.ssGrid
-     print $ "Current frep | max: " ++ show curMaxNElig
-     print curFrep
-     case ie of
-       ReuseConstraintViolated ->
-         print $ "Channels in use:" ++
-         (show . runN bkend $ indicesOf3 $ A.use (sState'^.ssGrid))
-       NEligOverflow -> do
-         let prevMaxWnet = runMax (sState'^.ssPAgent._1)
-             curMaxWnet = runMax (sState'^.ssAgent._1)
-             prevMaxWgrad = runMax (sState'^.ssPAgent._2)
-             curMaxWgrad = runMax (sState'^.ssAgent._2)
-         putStrLn $ printf "Prev agent | max wnet: %.2f | max wgrad: %.2f" prevMaxWnet prevMaxWgrad
-         print $ sState'^.ssPAgent
-         putStrLn $ printf "Current agent | max wnet: %.2f | max wgrad: %.2f" curMaxWnet curMaxWgrad
-         print $ sState'^.ssAgent
-   _ -> return ()
+  case simStop of
+    InternalError simError -> debugInfo simStateEnd simError
+    _ -> return ()
 
   -- Print the final 'statistics' report
-  let nCallsInProgress = runExp bkend $ boolSum (A.use (sState'^.ssGrid))
-      i = view ssIter sState'
-  putStrLn $ evalState (statsReportEnd nCallsInProgress i) (sState'^.ssStats)
+  let nCallsInProgress = runExp bkend $ boolSum (A.use (simStateEnd^.ssGrid))
+      i = view ssIter simStateEnd
+  liftIO $ putStrLn $ evalState (statsReportEnd nCallsInProgress i) (simStateEnd^.ssStats)
 
   -- Print simulation duration and speed (in wall-clock time)
-  endTime <- getCurrentTime -- in seconds
+  endTime <- liftIO getCurrentTime -- in seconds
   let dt_sec_double = fromRational $ toRational $ diffUTCTime endTime startTime :: Double
       dt_sec = floor dt_sec_double :: Int
       dt_min = floor (dt_sec_double / 60.0) :: Int
       dt_rem_sec = dt_sec - dt_min * 60 :: Int
       rate = fromIntegral i / dt_sec_double :: Double
-      last_etime = sState' ^. ssEvent . evTime :: Double -- in minutes
+      last_etime = simStateEnd ^. ssEvent . evTime :: Double -- in minutes
       sim_dt_min = floor last_etime :: Int
       sim_dt_rem_sec = floor ((last_etime - fromIntegral sim_dt_min) * 60.0) :: Int
-    in putStrLn $ printf
+    in liftIO $ putStrLn $ printf
         "\nSimulation duration: %dm%ds in sim time,\
         \ %dm%ds wall clock with speed %d events at %.0f events/second"
         sim_dt_min sim_dt_rem_sec
         dt_min dt_rem_sec
         i rate
+
+
+-- | Print out useful info in case of bugs
+debugInfo :: (MonadReader Opt m, MonadIO m) => SimState -> SimError -> m ()
+debugInfo simState simError = do
+  bkend <- asks backend
+  let prevFrep = simState^.ssPFrep
+      curFrep = simState^.ssFrep
+      runMax arr = thee $ runN bkend (A.maximum . A.flatten) arr
+      prevMaxNElig = runMax prevFrep
+      curMaxNElig = runMax curFrep
+  liftIO $ do
+     print "Prev event"
+     print  $ simState^.ssPEvent
+     print "Prev grid"
+     putStrLn . showGrid $ simState^.ssPGrid
+     print $ "Prev frep | max: " ++ show prevMaxNElig
+     print $ simState^.ssPFrep
+     print "Current iter"
+     print $ simState^.ssIter
+     print "Current event"
+     print $ simState^.ssEvent
+     print "Current grid"
+     putStrLn . showGrid $ simState^.ssGrid
+     print $ "Current frep | max: " ++ show curMaxNElig
+     print curFrep
+     case simError of
+       ReuseConstraintViolated ->
+         print $ "Channels in use:" ++
+         (show . runN bkend $ indicesOf3 $ A.use (simState^.ssGrid))
+       NEligOverflow -> do
+         let prevMaxWnet = runMax (simState^.ssPAgent._1)
+             curMaxWnet = runMax (simState^.ssAgent._1)
+             prevMaxWgrad = runMax (simState^.ssPAgent._2)
+             curMaxWgrad = runMax (simState^.ssAgent._2)
+         putStrLn $ printf "Prev agent | max wnet: %.2f | max wgrad: %.2f" prevMaxWnet prevMaxWgrad
+         print $ simState^.ssPAgent
+         putStrLn $ printf "Current agent | max wnet: %.2f | max wgrad: %.2f" curMaxWnet curMaxWgrad
+  return ()

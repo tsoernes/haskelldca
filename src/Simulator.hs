@@ -85,7 +85,7 @@ mkAgent = do
   return (w1, w2, avgr)
 
 -- | Given random seed, construct initial simulator state
-mkSimState :: Word64 -> Reader Opt SimState
+mkSimState :: (MonadReader Opt m) => Word64 -> m SimState
 mkSimState seed = do
   eg <- mkEventGen seed
   g <- mkGrid
