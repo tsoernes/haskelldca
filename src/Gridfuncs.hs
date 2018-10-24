@@ -76,7 +76,7 @@ eligibleMap cell grid = map not notEmap
     notEmap = fold1 (||) (transpose allNeighs)
 
 
--- | Return the eligible channels for the given cell. A channel is eligible if it is free
+-- | Return the eligible channels for the given cell. A channel is *eligible* if it is free
 -- | (i.e. False; not in use) in the cell and all of its neighbors with distance of 2 or less.
 eligibleChs :: Exp Cell -> Acc Grid -> Acc Chs
 eligibleChs cell grid = indicesOf $ eligibleMap cell grid

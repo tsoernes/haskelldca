@@ -78,7 +78,8 @@ getOpts rand = Opt <$>
 
 seedParser :: Word64 -> Parser Word64
 seedParser rand = (\b -> if b then 0 else rand) <$>
-  switch (long "fixed_rng" <> help "Use 0 for rng seed (is random if not enabled)")
+  switch (long "fixed_rng" <> help "Use a fixed (at 0) seed for the RNG.\
+                                  \ If this switch is not enabled, the seed is selected at random.")
 
 
 bkendOptStr :: String

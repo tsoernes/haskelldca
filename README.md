@@ -42,25 +42,29 @@ Support for compiling to GPU can be obtained by adding the dependency
 To see available options, run:
 ```
 stack exec --stack-yaml stack-release.yaml dca-exe -- --help
-
-  --call_dur MINUTES       Call duration for new calls (default: 3.0)
-  --call_dur_hoff MINUTES  Call duration for handed-off calls (default: 1.0)
-  --call_rate PER_HOUR     Call arrival rate (new calls) (default: 200.0)
-  --hoff_prob PROBABILITY  Hand-off probability (default: 0.0)
+Available options:
+  --call_dur MINUTES       Call duration for new calls. (default: 3.0)
+  --call_dur_hoff MINUTES  Call duration for handed-off calls. (default: 1.0)
+  --call_rate PER_HOUR     Call arrival rate (new calls). (default: 200.0)
+  --hoff_prob PROBABILITY  Hand-off probability. Set to 0 to disable
+                           hand-offs. (default: 0.0)
   --n_events N             Simulation duration, in number of processed
-                           events (default: 10000)
-  --log_iter N             How often to show call blocking probability and other
-                           run time statistics (default: 1000)
+                           events. (default: 10000)
+  --log_iter N             How often to show run time statistics such as call
+                           blocking probability. (default: 1000)
   --learning_rate F        For neural net, i.e. state value
-                           update (default: 2.52e-6)
-  --learning_rate_avg F    Learning rate for average reward
-                           estimate (default: 6.0e-2)
+                           update. (default: 2.52e-6)
+  --learning_rate_avg F    Learning rate for the average reward
+                           estimate. (default: 6.0e-2)
   --learning_rate_grad F   Learning rate for gradient
-                           corrections (default: 5.0e-6)
+                           correction. (default: 5.0e-6)
   --backend ARG            Accepted backends are 'interp' for 'Interpreter' and
-                           'cpu' for 'LLVM.Native'. (default: Interpreter)
-  --min_loss ARG           Quit if loss goes below given absolute value. Set to
-                           0 to disable. (default: 1.0e-5)
+                           'cpu' for 'LLVM.Native'.The interpreter yields better
+                           error messages. (default: Interpreter)
+  --min_loss F             Abort simulation if loss goes below given absolute
+                           value. Set to 0 to disable. (default: 0.0)
+  --fixed_rng              Use a fixed (at 0) seed for the RNG. If this switch
+                           is not enabled, the seed is selected at random.
   -h,--help                Show this help text
 ```
 
