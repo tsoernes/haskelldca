@@ -70,5 +70,3 @@ Available options:
 
 ### TODO
 - Implement hand-off look-ahead
-- Fix zero loss issue
-- Graceful quit on CTRL-C
